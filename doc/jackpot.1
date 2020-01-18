@@ -1,0 +1,135 @@
+.\" $Id: jackpot.man,v 1.0 2019/12/28 20:23:41 lhf Exp $
+.TH JACKPOT 1 "2019/12/28"
+.SH NAME
+jackpot \- A SOCKS5 over TLS proxy
+.SH SYNOPSIS
+.B jackpot
+[
+.I options
+]
+[
+.I args
+]
+.SH DESCRIPTION
+.B jackpot
+is a SOCKS5 over TLS proxy. It works as same as HTTPS protocol, whom highly secured communications over internet.
+.PP
+As so far, we call it SOCKS5 over TLS. But it's not just a SOCKS5 proxy directly over TLS layer. Client attempts to establish SOCKS5 connection over TLS, who must hit
+.B jackpot
+in server side. A
+.B jackpot
+usually is a serial string. The connection between client and server would switch HTTP to SOCKS5 once a
+.B jackpot
+been hit.
+.PP
+.B jackpot
+also support username and password verification in SOCKS5.
+.SH OPTIONS
+.TP
+.BI \-h
+show this help.
+.TP
+.BI \-v
+show version info.
+.TP
+.BI \-i " tip"
+set ip address of TLS-binding to (
+.IR tip
+).
+.TP
+.BI \-p " tport"
+set port number of TLS-binding to (
+.IR tport
+).
+.TP
+.BI \-k " private_key"
+set private key to (
+.IR private_key
+) for TLS.
+.TP
+.BI \-c " certificate"
+set
+.IR certificate
+for TLS.
+.TP
+.BI \-s " serial"
+set serial string to (
+.IR serial
+).
+.TP
+.BI \-e " page"
+set web page file to (
+.IR page
+) for HTTP responses.
+.TP
+.BI \-a " wip"
+set ip address of web service (server endpoint) or SOCKS5 server (client endpoint) to (
+.IR wip
+).
+.TP
+.BI \-w " wport"
+set port number of web service (server endpoint) or SOCKS5 server (client endpoint) to (
+.IR wport
+).
+.TP
+.BI \-t " timeout"
+set
+.IR timeout
+for events scheduler.
+.TP
+.BI \-x " nmpwd"
+set username and password to (
+.IR nmpwd
+), this argument is a file in server endpoint and a string-pair in client.
+.SH EXAMPLE
+If we already have a host running on internet, whose adddress is [11.22.33.44], then we setup a server whose TLS-endpoint would listening on port 433, and whose web service would listening on port 80. Also, the private key (
+.I key.pem
+)and certificate (
+.I cert.pem
+) file all prepared. And (
+.I hello
+) is the serial string. The command should look like this:
+.TP
+.I jackpot -i 11.22.33.44 -p 433 -a 11.22.33.44 -w 80 -k key.pem -c cert.pem -s hello
+As you can see, we didn't set (
+.I timeout
+) and (
+.I nmpwd
+). In this case, this server would use default timeout (20 seconds) and no username/password verification.
+.PP
+We can do the same function by simplify command like this:
+.TP
+.I jackpot -k key.pem -c cert.pem -s hello
+If we don't set its ip address and port, it will uses the default values (both ip: 0.0.0.0, tport:443, wport: 80).
+.PP
+If we want the server to have username/password verification, we should prepare a file (we name it:
+.I users.lst
+). Assume its content:
+.in +7n
+.EX
+alice:a1s2d3f4
+bob:qaaaa@@@33
+.EE
+.in
+.PP
+Then we append (
+.I \-x users.lst
+) to arguments and restart it.
+.PP
+For client side, we can connect above server in this way:
+.TP
+.I jackpot -i 11.22.33.44 -p 433 -a 11.22.33.44 -w 1080 -s hello
+You can also simplify command by ignoring all arguments except (
+.I tip
+) and (
+.I serial
+).
+.PP
+If server uses username/password verification, we can append (
+.I \-x alice:a1s2d3f4
+) to arguments.
+.SH SEE ALSO
+For more details please visit <https://github.com/hchen90/jackpot.git>.
+.SH AUTHOR
+Originally written by Hsiang Chen <a.chenxiang.z@gmail.com>.
+.\" EOF

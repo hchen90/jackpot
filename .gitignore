@@ -1,0 +1,17 @@
+CMakeCache.txt
+CMakeFiles/
+Makefile
+cmake_install.cmake
+doc/CMakeFiles/
+doc/Makefile
+doc/cmake_install.cmake
+src/CMakeCache.txt
+src/CMakeFiles/
+src/Makefile
+src/cert.pem
+src/cmake_install.cmake
+src/jackpot
+src/key.pem
+src/nmpwd
+src/page.html
+src/tags
