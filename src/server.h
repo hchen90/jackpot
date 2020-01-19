@@ -26,6 +26,7 @@ public:
   void start();
   void stop();
   bool done();
+  void cleanup();
 private:
   void read_cli_cb(ev::io& w, int revents);
   void read_tls_cb(ev::io& w, int revents);

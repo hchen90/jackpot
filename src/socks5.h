@@ -61,14 +61,16 @@ public:
   ~SOCKS5();
 
   bool init(TLS* tls, SSL* ssl, int fd, const std::string& ip_from, int port_from);
-  void start();
+  void start(float tmo);
   void stop();
   bool done();
+  void cleanup();
 
   void nmpwd(std::map<std::string, std::string>* nmpwd);
 private:
   void read_tls_cb(ev::io& w, int revents);
   void read_tgt_cb(ev::io& w, int revents);
+  void timeout_cb(ev::timer& w, int revents);
 
   short stage_init(void* ptr, size_t len);
   short stage_auth(void* ptr, size_t len);
@@ -90,6 +92,7 @@ private:
 
   ev::io* _w_tls;
   ev::io* _w_tgt;
+  ev::timer* _w_tmo;
 };
 
 #endif	/* _SOCKS5_H_ */

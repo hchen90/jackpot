@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.6)
 project(jackpot)
 
 set(PACKAGE_NAME "jackpot")
-set(PACKAGE_VERSION "1.0")
+set(PACKAGE_VERSION "1.1")
 set(PACKAGE_URL "https://github.com/hchen90/jackpot.git")
 set(PACKAGE_BUGREPORT "a.chenxiang.z@gmail.com")
 configure_file(config.h.in config.h @ONLY)

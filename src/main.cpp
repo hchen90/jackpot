@@ -113,6 +113,8 @@ int main(int argc, char* argv[])
     }
   }
 
+  signal(SIGPIPE, SIG_IGN);
+  
   if ((tags & 0x1c) == 0x1c) {
     // server
     if (port_web <= 0)

@@ -25,12 +25,9 @@
 
 using namespace std;
 
-SOCKS5::SOCKS5() : _fd_tls(-1), _port_from(0), _done(false), _stage(STAGE_INIT), _nmpwd(nullptr), _tls(nullptr), _ssl(nullptr), _w_tls(nullptr), _w_tgt(nullptr) {}
+SOCKS5::SOCKS5() : _fd_tls(-1), _port_from(0), _done(false), _stage(STAGE_INIT), _nmpwd(nullptr), _tls(nullptr), _ssl(nullptr), _w_tls(nullptr), _w_tgt(nullptr), _w_tmo(nullptr) {}
 
-SOCKS5::~SOCKS5()
-{
-  _target.close();
-}
+SOCKS5::~SOCKS5() { cleanup(); }
 
 bool SOCKS5::init(TLS* tls, SSL* ssl, int fd, const std::string& ip_from, int port_from)
 {
@@ -46,29 +43,38 @@ bool SOCKS5::init(TLS* tls, SSL* ssl, int fd, const std::string& ip_from, int po
     return false;
 }
 
-void SOCKS5::start()
+void SOCKS5::start(float tmo)
 {
   if ((_w_tls = new ev::io()) != nullptr) {
     _w_tls->set(_fd_tls, ev::READ);
     _w_tls->set<SOCKS5, &SOCKS5::read_tls_cb>(this);
     _w_tls->start();
   }
-  /*if ((_w_tmo = new ev::timer()) != nullptr) {
+  if ((_w_tmo = new ev::timer()) != nullptr) {
     _w_tmo->set(tmo, 0);
     _w_tmo->set<SOCKS5, &SOCKS5::timeout_cb>(this);
     _w_tmo->start();
-  }*/
+  }
 }
 
 void SOCKS5::stop()
 {
   if (_w_tls != nullptr) { delete _w_tls; _w_tls = nullptr; }
   if (_w_tgt != nullptr) { delete _w_tgt; _w_tgt = nullptr; }
-  //if (_w_tmo != nullptr) { delete _w_tmo; _w_tmo = nullptr; }
+  if (_w_tmo != nullptr) { delete _w_tmo; _w_tmo = nullptr; }
 
   log("Closing connection [%s:%u]", _ip_from.c_str(), _port_from);
 
   _done = true;
+}
+
+void SOCKS5::cleanup()
+{
+  stop();
+
+  if (_ssl != nullptr && _tls != nullptr) { _tls->close(_ssl); _ssl = nullptr; }
+  _target.close(_fd_tls);
+  _target.close();
 }
 
 short SOCKS5::stage_init(void* ptr, size_t len)
@@ -248,7 +254,7 @@ short SOCKS5::stage_udpp(void* ptr, size_t len)
 
 void SOCKS5::read_tls_cb(ev::io& w, int revents)
 {
-  Buffer res;
+  /*Buffer res;
 
   char buf[BUFSIZ];
   int len;
@@ -257,7 +263,6 @@ void SOCKS5::read_tls_cb(ev::io& w, int revents)
     res.append(buf, len);
     if ((unsigned) len < sizeof(buf)) break;
   }
-
   switch (_stage) {
     case STAGE_INIT: _stage = stage_init(res.data(), res.size()); break;
     case STAGE_AUTH: _stage = stage_auth(res.data(), res.size()); break;
@@ -265,25 +270,40 @@ void SOCKS5::read_tls_cb(ev::io& w, int revents)
     case STAGE_CONN: _stage = stage_conn(res.data(), res.size()); break;
     case STAGE_BIND: _stage = stage_bind(res.data(), res.size()); break;
     case STAGE_UDPP: _stage = stage_udpp(res.data(), res.size()); break;
-  }
+  }*/
 
-  if (_stage == STAGE_FINI) stop();
+  char buf[BUFSIZ * 3];
+  int len;
+
+  if ((len = _tls->read(_ssl, buf, sizeof(buf))) > 0) {
+    switch (_stage) {
+      case STAGE_INIT: _stage = stage_init(buf, len); break;
+      case STAGE_AUTH: _stage = stage_auth(buf, len); break;
+      case STAGE_REQU: _stage = stage_requ(buf, len); break;
+      case STAGE_CONN: _stage = stage_conn(buf, len); break;
+      case STAGE_BIND: _stage = stage_bind(buf, len); break;
+      case STAGE_UDPP: _stage = stage_udpp(buf, len); break;
+    }
+    if (_stage == STAGE_FINI) cleanup();
+  } else if (len == 0) cleanup();
+  else { perror("read_tls_cb"); cleanup(); }
 }
 
 void SOCKS5::read_tgt_cb(ev::io& w, int revents)
 {
-  Buffer res;
-
   char buf[BUFSIZ];
   ssize_t len;
 
-  while ((len = _target.recv(buf, sizeof(buf))) > 0) {
-    res.append(buf, len);
-    if ((unsigned) len < sizeof(buf)) break;
-  }
+  if ((len = _target.recv(buf, sizeof(buf))) > 0) _tls->write(_ssl, buf, len);
+  else if (len == 0) cleanup();
+  else { perror("read_tgt_cb"); cleanup(); }
+}
 
-  if (res.size() > 0) _tls->write(_ssl, res.data(), res.size());
-  else stop();
+void SOCKS5::timeout_cb(ev::timer& w, int revents)
+{
+  char rep[INET_ADDRSTRLEN] = { SOCKS5_VER, SOCKS5_REP_TTLEXPI, 0, SOCKS5_ATYP_IPV4, 0 };
+  _tls->write(_ssl, rep, sizeof(rep));
+  cleanup();
 }
 
 ////

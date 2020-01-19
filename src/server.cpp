@@ -36,12 +36,7 @@ using namespace std;
 
 Client::Client() : _tls(nullptr), _ssl(nullptr), _fd_cli(-1), _w_cli(nullptr), _w_tls(nullptr), _done(false), _port_from(0) {}
 
-Client::~Client()
-{
-  stop();
-  if (_ssl != nullptr && _tls != nullptr) _tls->close(_ssl);
-  _host.close();
-}
+Client::~Client() { cleanup(); }
 
 bool Client::init(const string& hostip, int port, int fd, TLS* tls, SSL* ssl, const string& ip_from, int port_from)
 {
@@ -92,36 +87,34 @@ bool Client::done()
   return _done;
 }
 
+void Client::cleanup()
+{
+  stop();
+
+  if (_ssl != nullptr && _tls != nullptr) { _tls->close(_ssl); _ssl = nullptr; }
+  _host.close(_fd_cli);
+  _host.close();
+}
+
 void Client::read_cli_cb(ev::io& w, int revents)
 {
-  Buffer res;
-
   char buf[BUFSIZ];
   ssize_t len;
 
-  while ((len = _host.recv(w.fd, buf, sizeof(buf))) > 0) {
-    res.append(buf, len);
-    if ((unsigned) len < sizeof(buf)) break;
-  }
-
-  if (res.size() > 0) _tls->write(_ssl, res.data(), res.size());
-  else stop();
+  if ((len = _host.recv(w.fd, buf, sizeof(buf))) > 0) _tls->write(_ssl, buf, len);
+  else if (len == 0) cleanup();
+  else { perror("read_cli_cb"); cleanup(); }
 }
 
 void Client::read_tls_cb(ev::io& w, int revents)
 {
-  Buffer res;
-
   char buf[BUFSIZ];
   ssize_t len;
 
-  while ((len = _tls->read(_ssl, buf, sizeof(buf))) > 0) {
-    res.append(buf, len);
-    if ((unsigned) len < sizeof(buf)) break;
-  }
+  if ((len = _tls->read(_ssl, buf, sizeof(buf))) > 0) _host.send(_fd_cli, buf, len);
+  else if (len == 0) cleanup();
+  else { perror("read_tls_cb"); cleanup(); }
 
-  if (res.size() > 0) _host.send(_fd_cli, res.data(), res.size());
-  else stop();
 }
 
 /////////////////////////////////////////////////
@@ -240,7 +233,6 @@ void Server::start_server()
 void Server::stop_client()
 {
   for (auto& it : _mp_client) {
-    it.second->stop();
     delete it.second;
   }
   _mp_client.clear();
@@ -256,7 +248,6 @@ void Server::stop_client()
 void Server::stop_server()
 {
   for (auto& it : _mp_socks5) {
-    it.second->stop();
     delete it.second;
   }
   _mp_socks5.clear();
@@ -395,7 +386,7 @@ void Server::soc_new_connection(int fd, const char* ip, int port)
   SOCKS5* socks5 = new SOCKS5();
 
   if (ssl != nullptr && _tls.fd(ssl, fd) > 0 && _tls.accept(ssl) > 0 && soc_accept(ssl) && socks5 != nullptr && socks5->init(&_tls, ssl, fd, ip, port)) {
-    socks5->start(/*_timeout*/);
+    socks5->start(_timeout);
     _mp_socks5.insert(make_pair(fd, socks5));
     log("New connection from [%s:%u]", ip, port);
     return;
@@ -433,6 +424,8 @@ void Server::web_new_connection(int fd, const char* ip, int port)
   if (! okay) _loc.send(fd, _400_ctx.data(), _400_ctx.size());
 
   _loc.close(fd);
+
+  log("New connection [%s:%u] to web service", ip, port);
 }
 
 void Server::loc_new_connection(int fd, const char* ip, int port)
