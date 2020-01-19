@@ -9,7 +9,7 @@ configure_file(config.h.in config.h @ONLY)
 
 add_definitions("-Wall -g")
 
-set(DEPLIBS "-pthread")
+set(DEPLIBS "-std=c++11")
 
 function(check_library LiBnM FaTaL)
   find_library(_${LiBnM}_ NAMES ${LiBnM})
@@ -25,7 +25,6 @@ endfunction(check_library)
 check_library(ev FATAL_ERROR)
 check_library(ssl FATAL_ERROR)
 check_library(crypto FATAL_ERROR)
-check_library(pthread FATAL_ERROR)
 
 file(GLOB SRCFILES "*.cpp")
 file(GLOB HDRFILES "*.h")

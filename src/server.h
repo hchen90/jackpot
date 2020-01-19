@@ -26,8 +26,9 @@ public:
   void start();
   void stop();
   bool done();
-  void cleanup();
 private:
+  void cleanup();
+
   void read_cli_cb(ev::io& w, int revents);
   void read_tls_cb(ev::io& w, int revents);
   void timeout_cb(ev::timer& w, int revents);
@@ -98,8 +99,9 @@ private:
 
   std::string _200_ctx, _400_ctx, _404_ctx, _serial;
   std::map<std::string, std::string> _nmpwd;
-  std::map<int, SOCKS5*> _mp_socks5;
-  std::map<int, Client*> _mp_client;
+
+  std::list<SOCKS5*> _lst_socks5;
+  std::list<Client*> _lst_client;
 
   struct addrinfo* _loc_addrinfo;
 

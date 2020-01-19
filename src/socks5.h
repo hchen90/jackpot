@@ -64,10 +64,11 @@ public:
   void start(float tmo);
   void stop();
   bool done();
-  void cleanup();
 
   void nmpwd(std::map<std::string, std::string>* nmpwd);
 private:
+  void cleanup();
+
   void read_tls_cb(ev::io& w, int revents);
   void read_tgt_cb(ev::io& w, int revents);
   void timeout_cb(ev::timer& w, int revents);

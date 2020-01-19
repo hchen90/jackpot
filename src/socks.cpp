@@ -89,42 +89,79 @@ int Socks::listen(int backlog)
 
 int Socks::connect(const struct sockaddr* addr, socklen_t addr_len)
 {
-  return ::connect(socket_fd, addr, addr_len);
+  int fl = ::fcntl(socket_fd, F_GETFL, 0);
+  if (fl != -1 && fl & O_NONBLOCK) {
+    return ::connect(socket_fd, addr, addr_len);
+  }
+
+  bool okay = false;
+  setnonblock(true); // set socket to non-blocking
+  int ret = ::connect(socket_fd, addr, addr_len);
+
+  if (ret == -1) {
+    if (errno == EINPROGRESS) {
+      fd_set fds; FD_ZERO(&fds); FD_SET(socket_fd, &fds);
+      struct timeval tmv = { .tv_sec = 2, .tv_usec = 0 };
+      for (int i = 0; i < 4; i++) {
+        if ((ret = select(socket_fd + 1, nullptr, &fds, nullptr, &tmv)) < 0 && errno != EINTR) {
+          break;
+        } else if (ret > 0) {
+          int val; socklen_t len = sizeof(val);
+          getsockopt(socket_fd, SOL_SOCKET, SO_ERROR, &val, &len);
+          if (val == 0) okay = true;
+          break;
+        }
+      }
+    }
+  } else okay = true;
+
+  setnonblock(false); // set it back to blocking mode
+  return okay ? 0 : -1;
 }
 
 int Socks::connect(const char* hostip, int port)
 {
-  if (hostip != nullptr) {
-    int rev = -1;
-    struct addrinfo* addr = NULL;
-    socket_hostip = hostip;
-    socket_port = port;
-    if (! resolve(hostip, port, &addr)) {
-      rev = connect(addr->ai_addr, addr->ai_addrlen);
-      resolve(NULL, 0, &addr);
-    }
-    return rev;
-  } else return -1;
+  return bind(hostip, port, false);
 }
 
 int Socks::connect(const char* file)
 {
-  if (file != nullptr) {
-    struct sockaddr_un addr;
-    socket_hostip = file;
-    socket_port = 0;
-    addr.sun_family = AF_UNIX;
-    strncpy(addr.sun_path, file, sizeof(addr) - sizeof(addr.sun_family));
-    return ::connect(socket_fd, (struct sockaddr*) &addr, sizeof(addr));
-  } else return -1;
+  return bind(file, false);
 }
 
-int Socks::bind(const struct sockaddr* addr, socklen_t addr_len)
+int Socks::bind(const struct sockaddr* addr, socklen_t addr_len, bool bd)
 {
-  return ::bind(socket_fd, addr, addr_len);
+  int fl = ::fcntl(socket_fd, F_GETFL, 0);
+  if (fl != -1 && fl & O_NONBLOCK) {
+    return bd ? ::bind(socket_fd, addr, addr_len) : ::connect(socket_fd, addr, addr_len);
+  }
+
+  bool okay = false;
+  setnonblock(true); // set socket to non-blocking
+  int ret = bd ? ::bind(socket_fd, addr, addr_len) : ::connect(socket_fd, addr, addr_len);
+
+  if (ret == -1) {
+    if (errno == EINPROGRESS) {
+      fd_set fds; FD_ZERO(&fds); FD_SET(socket_fd, &fds);
+      struct timeval tmv = { .tv_sec = 2, .tv_usec = 0 };
+      for (int i = 0; i < 4; i++) {
+        if ((ret = select(socket_fd + 1, nullptr, &fds, nullptr, &tmv)) < 0 && errno != EINTR) {
+          break;
+        } else if (ret > 0) {
+          int val; socklen_t len = sizeof(val);
+          getsockopt(socket_fd, SOL_SOCKET, SO_ERROR, &val, &len);
+          if (val == 0) okay = true;
+          break;
+        }
+      }
+    }
+  } else okay = true;
+
+  setnonblock(false); // set it back to blocking mode
+  return okay ? 0 : -1;
 }
 
-int Socks::bind(const char* hostip, int port)
+int Socks::bind(const char* hostip, int port, bool bd)
 {
   if (hostip != nullptr) {
     int rev = -1;
@@ -132,14 +169,20 @@ int Socks::bind(const char* hostip, int port)
     socket_hostip = hostip;
     socket_port = port;
     if (! resolve(hostip, port, &addr)) {
-      rev = bind(addr->ai_addr, addr->ai_addrlen);
+      for (struct addrinfo* ai = addr; ai != nullptr; ai = ai->ai_next) {
+        if (bd) {
+          if ((rev = bind(addr->ai_addr, addr->ai_addrlen)) != -1) break;
+        } else {
+          if ((rev = connect(addr->ai_addr, addr->ai_addrlen)) != -1) break;
+        }
+      }
       resolve(NULL, 0, &addr);
     }
     return rev;
   } else return -1;
 }
 
-int Socks::bind(const char* file)
+int Socks::bind(const char* file, bool bd)
 {
   if (file != nullptr) {
     struct sockaddr_un addr;
@@ -147,7 +190,7 @@ int Socks::bind(const char* file)
     socket_port = 0;
     addr.sun_family = AF_UNIX;
     strncpy(addr.sun_path, file, sizeof(addr) - sizeof(addr.sun_family));
-    return ::bind(socket_fd, (struct sockaddr*) &addr, sizeof(addr));
+    return bd ? bind((struct sockaddr*) &addr, sizeof(addr)) : connect((struct sockaddr*) &addr, sizeof(addr));
   } else return -1;
 }
 

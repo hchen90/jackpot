@@ -232,10 +232,8 @@ void Server::start_server()
 
 void Server::stop_client()
 {
-  for (auto& it : _mp_client) {
-    delete it.second;
-  }
-  _mp_client.clear();
+  for (auto& it : _lst_client) delete it;
+  _lst_client.clear();
   if (_w_loc != nullptr) { delete _w_loc; _w_loc = nullptr; }
   if (_w_tmo != nullptr) { delete _w_tmo; _w_tmo = nullptr; }
   if (_w_sig != nullptr) { delete _w_sig; _w_sig = nullptr; }
@@ -247,10 +245,8 @@ void Server::stop_client()
 
 void Server::stop_server()
 {
-  for (auto& it : _mp_socks5) {
-    delete it.second;
-  }
-  _mp_socks5.clear();
+  for (auto& it : _lst_socks5) delete it;
+  _lst_socks5.clear();
   if (_w_soc != nullptr) { delete _w_soc; _w_soc = nullptr; }
   if (_w_loc != nullptr) { delete _w_loc; _w_loc = nullptr; }
   if (_w_tmo != nullptr) { delete _w_tmo; _w_tmo = nullptr; }
@@ -387,7 +383,7 @@ void Server::soc_new_connection(int fd, const char* ip, int port)
 
   if (ssl != nullptr && _tls.fd(ssl, fd) > 0 && _tls.accept(ssl) > 0 && soc_accept(ssl) && socks5 != nullptr && socks5->init(&_tls, ssl, fd, ip, port)) {
     socks5->start(_timeout);
-    _mp_socks5.insert(make_pair(fd, socks5));
+    _lst_socks5.push_back(socks5);
     log("New connection from [%s:%u]", ip, port);
     return;
   } else perror("soc_new_connection");
@@ -435,7 +431,7 @@ void Server::loc_new_connection(int fd, const char* ip, int port)
 
   if (ssl != nullptr && cli != nullptr && cli->init(_soc.gethostip(), _soc.getport(), fd, &_tls, ssl, ip, port) && loc_accept(ssl)) {
     cli->start(/*_timeout*/);
-    _mp_client.insert(make_pair(fd, cli));
+    _lst_client.push_back(cli);
     log("New connection from [%s:%u]", ip, port);
     return;
   } else perror("loc_new_connection");
@@ -544,23 +540,21 @@ void Server::loc_accept_cb(ev::io& w, int revents)
   } else perror("loc_accept");
 }
 
-////
-
 void Server::timeout_cb(ev::timer& w, int revents)
 {
   if (_issrv) {
-    for (auto it = _mp_socks5.begin(); it != _mp_socks5.end(); ) {
-      if (it->second->done()) {
+    for (auto it = _lst_socks5.begin(); it != _lst_socks5.end(); ) {
+      if ((*it)->done()) {
         auto lt = it; lt++;
-        _mp_socks5.erase(it);
+        _lst_socks5.erase(it);
         it = lt;
       } else it++;
     }
   } else {
-    for (auto it = _mp_client.begin(); it != _mp_client.end(); ) {
-      if (it->second->done()) {
+    for (auto it = _lst_client.begin(); it != _lst_client.end(); ) {
+      if ((*it)->done()) {
         auto lt = it; lt++;
-        _mp_client.erase(it);
+        _lst_client.erase(it);
         it = lt;
       } else it++;
     }

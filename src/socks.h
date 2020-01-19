@@ -36,9 +36,9 @@ public:
   int connect(const struct sockaddr* addr, socklen_t addr_len);
   int connect(const char* hostip, int port);
   int connect(const char* file);
-  int bind(const struct sockaddr* addr, socklen_t addr_len);
-  int bind(const char* hostip, int port);
-  int bind(const char* file);
+  int bind(const struct sockaddr* addr, socklen_t addr_len, bool bd = true);
+  int bind(const char* hostip, int port, bool bd = true);
+  int bind(const char* file, bool bd = true);
   int accept(struct sockaddr* addr, socklen_t* addr_len);
   int accept(char* hostip, int& port);
 
