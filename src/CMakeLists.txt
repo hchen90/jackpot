@@ -30,3 +30,6 @@ file(GLOB SRCFILES "*.cpp")
 file(GLOB HDRFILES "*.h")
 add_executable(jackpot ${SRCFILES} ${HDRFILES})
 target_link_libraries(jackpot ${DEPLIBS})
+
+set(CMAKE_INSTALL_BINDIR "/usr/bin")
+install(TARGETS jackpot DESTINATION ${CMAKE_INSTALL_BINDIR})
