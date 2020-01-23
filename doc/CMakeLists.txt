@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 2.6)
+set(CMAKE_INSTALL_SYSCONFDIR "/etc")
 install(FILES jackpot.conf DESTINATION ${CMAKE_INSTALL_SYSCONFDIR})
 set(CMAKE_INSTALL_DATADIR "/usr/share")
 install(FILES jackpot.1 DESTINATION ${CMAKE_INSTALL_DATADIR}/man/1)
