@@ -189,7 +189,7 @@ int Socks::bind(const char* file, bool bd)
     socket_hostip = file;
     socket_port = 0;
     addr.sun_family = AF_UNIX;
-    strncpy(addr.sun_path, file, sizeof(addr) - sizeof(addr.sun_family));
+    strncpy(addr.sun_path, file, sizeof(addr.sun_path));
     return bd ? bind((struct sockaddr*) &addr, sizeof(addr)) : connect((struct sockaddr*) &addr, sizeof(addr));
   } else return -1;
 }
