@@ -54,14 +54,16 @@ public:
   Server();
   ~Server();
 
-  bool client(const std::string& ip_tls, int port_tls, const std::string& ip_local, int port_local, const std::string& serial, const std::string& nmpwd); // local SOCKS5 server
-  bool server(const std::string& ip_tls, int port_tls, const std::string& ip_web, int port_web, const std::string& serial, const std::string& nmpwd, const std::string& key, const std::string& cert, const std::string& page, float timeout); // remote SOCKS5-over-TLS server
+  bool client(const std::string& ip_tls, int port_tls, const std::string& ip_local, int port_local, const std::string& serial, const std::string& nmpwd, const std::string& pidfile); // local SOCKS5 server
+  bool server(const std::string& ip_tls, int port_tls, const std::string& ip_web, int port_web, const std::string& serial, const std::string& nmpwd, const std::string& pidfile, const std::string& key, const std::string& cert, const std::string& page, float timeout); // remote SOCKS5-over-TLS server
 
   void start();
   void stop();
 
   bool running() const;
 private:
+  bool pidfile(const std::string& pidfl);
+
   bool web_hdrinfo(const Buffer& str, std::string& cmd, std::string& path);
   bool web_initpage(const std::string& page);
   bool nmpwd_init(const std::string& nmpwd, bool fl);
@@ -97,7 +99,7 @@ private:
   Socks _loc; // default: [server] port 80
               // default: [client] port 1080
 
-  std::string _200_ctx, _400_ctx, _404_ctx, _serial;
+  std::string _200_ctx, _400_ctx, _404_ctx, _serial, _pidfile;
   std::map<std::string, std::string> _nmpwd;
 
   std::list<SOCKS5*> _lst_socks5;
@@ -110,6 +112,8 @@ private:
   ev::io* _w_loc;
   ev::timer* _w_tmo;
   ev::sig* _w_sig;
+
+  int _fd_lock;
 };
 
 #endif	/* _SERVER_H_ */

@@ -19,6 +19,8 @@
 #include <cstring>
 #include <fstream>
 
+#include <unistd.h>
+
 #include "config.h"
 #include "buffer.h"
 #include "server.h"
@@ -130,12 +132,18 @@ Server::Server() :
   _w_tmo(nullptr),
   _w_sig(nullptr) {}
 
-Server::~Server() {}
+Server::~Server()
+{
+  if (! access(_pidfile.c_str(), F_OK)) remove(_pidfile.c_str());
+}
 
-bool Server::client(const string& ip_tls, int port_tls, const string& ip_local, int port_local, const string& serial, const string& nmpwd)
+bool Server::client(const string& ip_tls, int port_tls, const string& ip_local, int port_local, const string& serial, const string& nmpwd, const string& pidfl)
 {
   if (! _tls.init()) {
     _tls.error();
+    return false;
+  }
+  if (! pidfl.empty() && ! pidfile(pidfl)) {
     return false;
   }
   if (_soc.resolve(ip_tls.c_str(), port_tls, &_loc_addrinfo) != -1 && \
@@ -148,10 +156,13 @@ bool Server::client(const string& ip_tls, int port_tls, const string& ip_local, 
   return false;
 }
 
-bool Server::server(const string& ip_tls, int port_tls, const string& ip_web, int port_web, const string& serial, const string& nmpwd, const string& key, const string& cert, const string& page, float timeout)
+bool Server::server(const string& ip_tls, int port_tls, const string& ip_web, int port_web, const string& serial, const string& nmpwd, const string& pidfl, const string& key, const string& cert, const string& page, float timeout)
 {
   if (! _tls.init(key, cert)) {
     _tls.error();
+    return false;
+  }
+  if (! pidfl.empty() && ! pidfile(pidfl)) {
     return false;
   }
   if (_soc.socket(0x111) != -1 && _soc.bind(ip_tls.c_str(), port_tls) != -1 && _soc.listen() != -1 && \
@@ -168,6 +179,21 @@ bool Server::server(const string& ip_tls, int port_tls, const string& ip_web, in
     return _issrv = true;
   } else perror("socket");
   return false;
+}
+
+bool Server::pidfile(const string& pidfl)
+{
+  if (! access(pidfl.c_str(), F_OK)) return false;
+
+  _pidfile = pidfl;
+
+  ofstream fout(pidfl.c_str(), ios::out);
+
+  if (fout.good()) {
+    fout << (uint32_t) getpid() << endl;
+    fout.close();
+    return true;
+  } else return false;
 }
 
 void Server::start() { if (_issrv) start_server(); else start_client(); }

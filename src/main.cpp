@@ -23,7 +23,11 @@
 #include <signal.h>
 
 #include "config.h"
+#include "conf.h"
 #include "server.h"
+#include "utils.h"
+
+#define INITFAIL "Cannot initialized proxy"
 
 using namespace std;
 
@@ -49,6 +53,8 @@ void usage(void)
         << "  -w [wport]        set port number for web service or SOCKS5 server" << endl \
         << "  -t [timeout]      set timeout" << endl \
         << "  -x [nmpwd]        set username and password for SOCKS5 server" << endl \
+        << "  -m [config]       set configuration file" << endl \
+        << "  -n [pidfile]      set PID file" << endl \
         << endl \
         << "Report bugs to <" << PACKAGE_BUGREPORT << ">." << endl;
 }
@@ -56,10 +62,10 @@ void usage(void)
 int main(int argc, char* argv[])
 {
   int opt, port_tls = 443, port_web = 0;
-  string ip_tls = "0.0.0.0", ip_web = "0.0.0.0", key, cert, serial, nmpwd, page;
+  string ip_tls = "0.0.0.0", ip_web = "0.0.0.0", key, cert, serial, nmpwd, page, cfgfile, pidfile;
   short tags = 0; float timeout = 20.0;
 
-  while ((opt = getopt(argc, argv, "hvi:p:k:c:s:e:a:w:t:x:")) != -1) {
+  while ((opt = getopt(argc, argv, "hvi:p:k:c:s:e:a:w:t:x:m:n:")) != -1) {
     switch (opt) {
       case 'h':
         usage();
@@ -107,6 +113,14 @@ int main(int argc, char* argv[])
         nmpwd = optarg;
         tags |= 0x200;
         break;
+      case 'm': // configuration
+        cfgfile = optarg;
+        tags |= 0x400;
+        break;
+      case 'n': // PID file
+        pidfile = optarg;
+        tags |= 0x800;
+        break;
       default:
         usage();
         return EXIT_FAILURE;
@@ -114,19 +128,69 @@ int main(int argc, char* argv[])
   }
 
   signal(SIGPIPE, SIG_IGN);
-  
-  if ((tags & 0x1c) == 0x1c) {
+
+  if (tags & 0x400) {
+    Conf cfg;
+
+    if (cfg.open(cfgfile)) {
+      string str;
+
+      cfg.get("tls", "ip", ip_tls);
+      cfg.get("main", "serial", serial);
+      cfg.get("main", "pidfile", pidfile);
+
+      if (cfg.get("main", "timeout", str))
+        timeout = atof(str.c_str());
+      if (cfg.get("tls", "port", str))
+        port_tls = atoi(str.c_str());
+      if (cfg.get("main", "private_key", key) && cfg.get("main", "certificate", cert)) {
+        cfg.get("web", "ip", ip_web);
+        cfg.get("web", "page", page);
+        cfg.get("user", "file", nmpwd);
+        
+        if (cfg.get("web", "port", str))
+          port_web = atoi(str.c_str());
+        if (port_web <= 0)
+          port_web = 80;
+        if (server.server(ip_tls, port_tls, ip_web, port_web, serial, nmpwd, pidfile, key, cert, page, timeout))
+          server.start();
+        else
+          log(INITFAIL);
+      } else {
+        cfg.get("local", "ip", ip_web);
+        
+        string nam, pwd;
+
+        if (cfg.get("user", "name", nam) && cfg.get("user", "password", pwd)) {
+          nmpwd = nam + ":";
+          nmpwd += pwd;
+        }
+        if (cfg.get("local", "port", str))
+          port_web = atoi(str.c_str());
+        if (port_web <= 0)
+          port_web = 1080;
+        if (server.client(ip_tls, port_tls, ip_web, port_web, serial, nmpwd, pidfile))
+          server.start();
+        else
+          log(INITFAIL);
+      }
+    }
+  } else if ((tags & 0x1c) == 0x1c) {
     // server
     if (port_web <= 0)
       port_web = 80;
-    if (server.server(ip_tls, port_tls, ip_web, port_web, serial, nmpwd, key, cert, page, timeout))
+    if (server.server(ip_tls, port_tls, ip_web, port_web, serial, nmpwd, pidfile, key, cert, page, timeout))
       server.start();
+    else
+      log(INITFAIL);
   } else if ((tags & 0x11) == 0x11) {
     // client
     if (port_web <= 0)
       port_web = 1080;
-    if (server.client(ip_tls, port_tls, ip_web, port_web, serial, nmpwd))
+    if (server.client(ip_tls, port_tls, ip_web, port_web, serial, nmpwd, pidfile))
       server.start();
+    else
+      log(INITFAIL);
   } else {
     usage();
     return EXIT_FAILURE;
