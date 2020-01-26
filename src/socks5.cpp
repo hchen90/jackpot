@@ -167,13 +167,12 @@ short SOCKS5::stage_requ(void* ptr, size_t len)
         rep[3] = SOCKS5_ATYP_IPV4;
 
         if (inet_ntop(AF_INET, &sin.sin_addr.s_addr, ips, sizeof(ips)) != nullptr) {
-          log("[%s:%u] try to reach [%s:%u]", _ip_from.c_str(), _port_from, ips, ntohs(sin.sin_port));
-          if (_target.socket(0x11) != -1 && _target.connect((struct sockaddr*) &sin, sin_l) != -1) {
+          if (_target.connect((struct sockaddr*) &sin, sin_l) != -1) {
             ips[INET_ADDRSTRLEN] = '\0';
-            log("[%s:%u] connected to [%s:%u]", _ip_from.c_str(), _port_from, ips, ntohs(sin.sin_port));
+            log("[%s:%u] connected to [%s:%u] (ip4)", _ip_from.c_str(), _port_from, ips, ntohs(sin.sin_port));
             okay = true;    
           } else {
-            log("[%s:%u] cannot connect to [%s:%u]", _ip_from.c_str(), _port_from, ips, ntohs(sin.sin_port));
+            log("[%s:%u] cannot connect to [%s:%u] (ip4)", _ip_from.c_str(), _port_from, ips, ntohs(sin.sin_port));
           }
         }
       } else if (aty == SOCKS5_ATYP_IPV6) {
@@ -189,14 +188,13 @@ short SOCKS5::stage_requ(void* ptr, size_t len)
         rep[3] = SOCKS5_ATYP_IPV6;
         
         if (inet_ntop(AF_INET6, &sin6.sin6_addr, ips, sizeof(ips)) != nullptr) {
-          log("[%s:%u] try to reach [%s:%u]", _ip_from.c_str(), _port_from, ips, ntohs(sin6.sin6_port));
-          if (_target.socket(0x11) != -1 && _target.connect((struct sockaddr*) &sin6, sin6_l) != -1) {
+          if (_target.connect((struct sockaddr*) &sin6, sin6_l) != -1) {
             ips[INET6_ADDRSTRLEN] = '\0';
-            log("[%s]:(%u) connected to [%s]:(%u)", _ip_from.c_str(), _port_from, ips, ntohs(sin6.sin6_port));
+            log("[%s]:(%u) connected to [%s]:(%u) (ip6)", _ip_from.c_str(), _port_from, ips, ntohs(sin6.sin6_port));
             rep_l = STATUS_IPV6_LENGTH;
             okay = true;
           } else {
-            log("[%s]:(%u) cannot connect to [%s]:(%u)", _ip_from.c_str(), _port_from, ips, ntohs(sin6.sin6_port));
+            log("[%s]:(%u) cannot connect to [%s]:(%u) (ip6)", _ip_from.c_str(), _port_from, ips, ntohs(sin6.sin6_port));
           }
         }
       } else if (aty == SOCKS5_ATYP_DOMAINNAME) {
@@ -205,12 +203,11 @@ short SOCKS5::stage_requ(void* ptr, size_t len)
         string hostip = string(buf + 5, buf[4]);
         short port = ntohs(*(short*) (buf + 5 + buf[4]));
 
-        log("[%s:%u] try to reach [%s:%u]", _ip_from.c_str(), _port_from, hostip.c_str(), port);
-        if (_target.socket(0x11) != -1 && _target.connect(hostip.c_str(), port) != -1) {
-          log("[%s:%u] connected to [%s:%u]", _ip_from.c_str(), _port_from, hostip.c_str(), port);
+        if (_target.connect(hostip.c_str(), port) != -1) {
+          log("[%s:%u] connected to [%s:%u] (domain)", _ip_from.c_str(), _port_from, hostip.c_str(), port);
           okay = true;
         } else {
-          log("[%s:%u] cannot connect to [%s:%u]", _ip_from.c_str(), _port_from, hostip.c_str(), port);
+          log("[%s:%u] cannot connect to [%s:%u] (domain)", _ip_from.c_str(), _port_from, hostip.c_str(), port);
         }
       }
 

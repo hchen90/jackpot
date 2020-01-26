@@ -43,6 +43,9 @@ void usage(void)
         << "Options:" << endl \
         << "  -h                show this help" << endl \
         << "  -v                show version info" << endl \
+        << "  -4                force IP4" << endl \
+        << "  -6                force IP6" << endl \
+        << "  -b                use multiple threads" << endl \
         << "  -i [tip]          set ip address for tls" << endl \
         << "  -p [tport]        set port number for tls" << endl \
         << "  -k [private_key]  set private key file" << endl \

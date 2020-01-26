@@ -42,7 +42,7 @@ Client::~Client() { cleanup(); }
 
 bool Client::init(const string& hostip, int port, int fd, TLS* tls, SSL* ssl, const string& ip_from, int port_from)
 {
-  if (_host.socket(0x11) != -1 && _host.connect(hostip.c_str(), port) != -1 && tls->fd(ssl, _host.socket()) > 0 && tls->connect(ssl) > 0) {
+  if (_host.connect(hostip.c_str(), port) != -1 && tls->fd(ssl, _host.socket()) > 0 && tls->connect(ssl) > 0) {
     _fd_cli = fd;
     _tls = tls;
     _ssl = ssl;
@@ -147,7 +147,7 @@ bool Server::client(const string& ip_tls, int port_tls, const string& ip_local, 
     return false;
   }
   if (_soc.resolve(ip_tls.c_str(), port_tls, &_loc_addrinfo) != -1 && \
-      _loc.socket(0x111) != -1 && _loc.bind(ip_local.c_str(), port_local) != -1 && _loc.listen() != -1) {
+      _loc.bind(ip_local.c_str(), port_local) != -1 && _loc.listen() != -1) {
     if (! nmpwd.empty()) nmpwd_init(nmpwd, false);
     _serial = serial;
     _running = true;
@@ -165,8 +165,8 @@ bool Server::server(const string& ip_tls, int port_tls, const string& ip_web, in
   if (! pidfl.empty() && ! pidfile(pidfl)) {
     return false;
   }
-  if (_soc.socket(0x111) != -1 && _soc.bind(ip_tls.c_str(), port_tls) != -1 && _soc.listen() != -1 && \
-      _loc.socket(0x111) != -1 && _loc.bind(ip_web.c_str(), port_web) != -1 && _loc.listen() != -1) {
+  if (_soc.bind(ip_tls.c_str(), port_tls) != -1 && _soc.listen() != -1 && \
+      _loc.bind(ip_web.c_str(), port_web) != -1 && _loc.listen() != -1) {
     if (! nmpwd.empty()) nmpwd_init(nmpwd, true);
     if (! web_initpage(page)) {
       _200_ctx = DEF_CTX_SUCCESS;
