@@ -7,7 +7,7 @@ set(PACKAGE_URL "https://github.com/hchen90/jackpot.git")
 set(PACKAGE_BUGREPORT "a.chenxiang.z@gmail.com")
 configure_file(config.h.in config.h @ONLY)
 
-add_definitions("-Wall -g")
+add_definitions("-Wall -g -rdynamic")
 
 set(DEPLIBS "-std=c++11")
 
@@ -25,6 +25,7 @@ endfunction(check_library)
 check_library(ev FATAL_ERROR)
 check_library(ssl FATAL_ERROR)
 check_library(crypto FATAL_ERROR)
+check_library(pthread FATAL_ERROR)
 
 file(GLOB SRCFILES "*.cpp")
 file(GLOB HDRFILES "*.h")

@@ -20,7 +20,6 @@
 #include <iostream>
 #include <string>
 #include <unistd.h>
-#include <signal.h>
 
 #include "config.h"
 #include "conf.h"
@@ -36,21 +35,22 @@ Server server;
 void usage(void)
 {
   cout  << PACKAGE_NAME << " version " << PACKAGE_VERSION << endl \
-        << "Copyright (C) 2019 Hsiang Chen" << endl \
+        << "Copyright (C) 2019-2020 Hsiang Chen" << endl \
         << "This program may be freely redistributed under the terms of the GNU General Public License" << endl \
         << endl \
         << "Usage: " << PACKAGE_NAME << " [options] [args]" << endl \
         << "Options:" << endl \
         << "  -h                show this help" << endl \
         << "  -v                show version info" << endl \
+        << "  -b                enable multiple threads"<< endl \
         << "  -i [tip]          set ip address for tls" << endl \
         << "  -p [tport]        set port number for tls" << endl \
         << "  -k [private_key]  set private key file" << endl \
         << "  -c [certificate]  set certificate file" << endl \
         << "  -s [serial]       set serial string" << endl \
         << "  -e [page]         set web page file" << endl \
-        << "  -a [wip]          set ip address for web service or SOCKS5 server" << endl \
-        << "  -w [wport]        set port number for web service or SOCKS5 server" << endl \
+        << "  -a [wip]          set ip address for Web/SOCKS5 server" << endl \
+        << "  -w [wport]        set port number for Web/SOCKS5 server" << endl \
         << "  -t [timeout]      set timeout" << endl \
         << "  -x [nmpwd]        set username and password for SOCKS5 server" << endl \
         << "  -m [config]       set configuration file" << endl \
@@ -64,8 +64,9 @@ int main(int argc, char* argv[])
   int opt, port_tls = 443, port_web = 0;
   string ip_tls = "0.0.0.0", ip_web = "0.0.0.0", key, cert, serial, nmpwd, page, cfgfile, pidfile;
   short tags = 0; float timeout = 20.0;
+  bool multi = false;
 
-  while ((opt = getopt(argc, argv, "hvi:p:k:c:s:e:a:w:t:x:m:n:")) != -1) {
+  while ((opt = getopt(argc, argv, "hvbi:p:k:c:s:e:a:w:t:x:m:n:")) != -1) {
     switch (opt) {
       case 'h':
         usage();
@@ -73,6 +74,9 @@ int main(int argc, char* argv[])
       case 'v':
         cout << PACKAGE_NAME << " version " << PACKAGE_VERSION << endl;
         return EXIT_SUCCESS;
+      case 'b': // multiple threads
+        multi = true;
+        break;
       case 'i': // tls ip
         ip_tls = optarg;
         tags |= 0x1;
@@ -153,7 +157,7 @@ int main(int argc, char* argv[])
         if (port_web <= 0)
           port_web = 80;
         if (server.server(ip_tls, port_tls, ip_web, port_web, serial, nmpwd, pidfile, key, cert, page, timeout))
-          server.start();
+          server.start(multi);
         else
           log(INITFAIL);
       } else {
@@ -170,7 +174,7 @@ int main(int argc, char* argv[])
         if (port_web <= 0)
           port_web = 1080;
         if (server.client(ip_tls, port_tls, ip_web, port_web, serial, nmpwd, pidfile))
-          server.start();
+          server.start(multi);
         else
           log(INITFAIL);
       }
@@ -180,7 +184,7 @@ int main(int argc, char* argv[])
     if (port_web <= 0)
       port_web = 80;
     if (server.server(ip_tls, port_tls, ip_web, port_web, serial, nmpwd, pidfile, key, cert, page, timeout))
-      server.start();
+      server.start(multi);
     else
       log(INITFAIL);
   } else if ((tags & 0x11) == 0x11) {
@@ -188,7 +192,7 @@ int main(int argc, char* argv[])
     if (port_web <= 0)
       port_web = 1080;
     if (server.client(ip_tls, port_tls, ip_web, port_web, serial, nmpwd, pidfile))
-      server.start();
+      server.start(multi);
     else
       log(INITFAIL);
   } else {

@@ -20,9 +20,9 @@
 #include <fstream>
 
 #include <unistd.h>
+#include <execinfo.h>
 
 #include "config.h"
-#include "buffer.h"
 #include "server.h"
 #include "utils.h"
 
@@ -36,7 +36,7 @@ using namespace std;
 
 /////////////////////////////////////////////////
 
-Client::Client() : _tls(nullptr), _ssl(nullptr), _fd_cli(-1), _w_cli(nullptr), _w_tls(nullptr), _done(false), _port_from(0) {}
+Client::Client() : _tls(nullptr), _ssl(nullptr), _fd_cli(-1), _w_cli(nullptr), _w_tls(nullptr), _done(false), _multi(false), _running(false), _timeout(DEF_TIMEOUT), _port_from(0), _td_trf(nullptr) {}
 
 Client::~Client() { cleanup(); }
 
@@ -54,32 +54,46 @@ bool Client::init(const string& hostip, int port, int fd, TLS* tls, SSL* ssl, co
   return false;
 }
 
-void Client::start(/*float tmo*/)
+void Client::start(bool multi, float tmo)
 {
-  if ((_w_cli = new ev::io()) != nullptr) {
-    _w_cli->set(_fd_cli, ev::READ);
-    _w_cli->set<Client, &Client::read_cli_cb>(this);
-    _w_cli->start();
+  _multi = multi;
+  _timeout = tmo;
+  _running = true;
+
+  if (multi) {
+    if ((_td_trf = new thread(transfer_td, this)) != nullptr) {
+      _td_trf->detach();
+    }
+  } else {
+    if ((_w_cli = new ev::io()) != nullptr) {
+      _w_cli->set(_fd_cli, ev::READ);
+      _w_cli->set<Client, &Client::read_cli_cb>(this);
+      _w_cli->start();
+    }
+    if ((_w_tls = new ev::io()) != nullptr) {
+      _w_tls->set(_host.socket(), ev::READ);
+      _w_tls->set<Client, &Client::read_tls_cb>(this);
+      _w_tls->start();
+    }
+    /*if ((_w_tmo = new ev::timer()) != nullptr) {
+      _w_tmo->set(tmo, 0);
+      _w_tmo->set<Client, &Client::timeout_cb>(this);
+      _w_tmo->start();
+    }*/
   }
-  if ((_w_tls = new ev::io()) != nullptr) {
-    _w_tls->set(_host.socket(), ev::READ);
-    _w_tls->set<Client, &Client::read_tls_cb>(this);
-    _w_tls->start();
-  }
-  /*if ((_w_tmo = new ev::timer()) != nullptr) {
-    _w_tmo->set(tmo, 0);
-    _w_tmo->set<Client, &Client::timeout_cb>(this);
-    _w_tmo->start();
-  }*/
 }
 
 void Client::stop()
 {
-  if (_w_cli != nullptr) { delete _w_cli; _w_cli = nullptr; }
-  if (_w_tls != nullptr) { delete _w_tls; _w_tls = nullptr; }
-  //if (_w_tmo != nullptr) { delete _w_tmo; _w_tmo = nullptr; }
+  _running = false;
 
-  log("Closing connection [%s:%u]", _ip_from.c_str(), _port_from);
+  if (_multi) {
+    if (_td_trf != nullptr) { delete _td_trf; _td_trf = nullptr; }
+  } else {
+    if (_w_cli != nullptr) { delete _w_cli; _w_cli = nullptr; }
+    if (_w_tls != nullptr) { delete _w_tls; _w_tls = nullptr; }
+    //if (_w_tmo != nullptr) { delete _w_tmo; _w_tmo = nullptr; }
+  }
 
   _done = true;
 }
@@ -96,27 +110,73 @@ void Client::cleanup()
   if (_ssl != nullptr && _tls != nullptr) { _tls->close(_ssl); _ssl = nullptr; }
   _host.close(_fd_cli);
   _host.close();
+
+  log("Closing connection [%s:%u]", _ip_from.c_str(), _port_from);
+}
+
+bool Client::read_cli()
+{
+  char buf[BUFSIZ];
+  ssize_t len;
+
+  if ((len = _host.recv(_fd_cli, buf, sizeof(buf))) > 0) {
+    _tls->write(_ssl, buf, len);
+    return true;
+  } else {
+    if (errno != 0) perror("read_cli");
+    return false;
+  }
+}
+
+bool Client::read_tls()
+{
+  char buf[BUFSIZ];
+  ssize_t len;
+
+  if ((len = _tls->read(_ssl, buf, sizeof(buf))) > 0) {
+    _host.send(_fd_cli, buf, len);
+    return true;
+  } else {
+    if (errno != 0) perror("read_tls");
+    return false;
+  }
 }
 
 void Client::read_cli_cb(ev::io& w, int revents)
 {
-  char buf[BUFSIZ];
-  ssize_t len;
-
-  if ((len = _host.recv(w.fd, buf, sizeof(buf))) > 0) _tls->write(_ssl, buf, len);
-  else if (len == 0) cleanup();
-  else { perror("read_cli_cb"); cleanup(); }
+  if (! read_cli()) cleanup();
 }
 
 void Client::read_tls_cb(ev::io& w, int revents)
 {
-  char buf[BUFSIZ];
-  ssize_t len;
+  if (! read_tls()) cleanup();
+}
 
-  if ((len = _tls->read(_ssl, buf, sizeof(buf))) > 0) _host.send(_fd_cli, buf, len);
-  else if (len == 0) cleanup();
-  else { perror("read_tls_cb"); cleanup(); }
+void Client::transfer_td(Client* self)
+{
+  fd_set rfds, fds;
 
+  int fd = self->_host.socket();
+
+  FD_ZERO(&rfds);
+  FD_SET(fd, &rfds);
+  FD_SET(self->_fd_cli, &rfds);
+
+  struct timeval tmv = { .tv_sec = (time_t) self->_timeout, .tv_usec = 0 };
+
+  while (self->_running) {
+    memcpy(&fds, &rfds, sizeof(fds));
+
+    if (select(MAX(fd, self->_fd_cli) + 1, &fds, nullptr, nullptr, &tmv) > 0) {
+      if (FD_ISSET(fd, &fds)) { // from _host
+        if (! self->read_tls()) break;
+      } else { // from client
+        if (! self->read_cli()) break;
+      }
+    } else break;
+  }
+
+  self->cleanup();
 }
 
 /////////////////////////////////////////////////
@@ -124,13 +184,15 @@ void Client::read_tls_cb(ev::io& w, int revents)
 Server::Server() : 
   _running(false),
   _issrv(false),
+  _multi(false),
   _timeout(DEF_TIMEOUT),
   _loc_addrinfo(nullptr),
   _loop(nullptr), 
   _w_soc(nullptr),
   _w_loc(nullptr),
   _w_tmo(nullptr),
-  _w_sig(nullptr) {}
+  _w_sig(nullptr),
+  _w_seg(nullptr) {}
 
 Server::~Server()
 {
@@ -196,7 +258,7 @@ bool Server::pidfile(const string& pidfl)
   } else return false;
 }
 
-void Server::start() { if (_issrv) start_server(); else start_client(); }
+void Server::start(bool multi) { _multi = multi; if (_issrv) start_server(); else start_client(); }
 
 void Server::stop() { if (_issrv) stop_server(); else stop_client(); }
 
@@ -250,6 +312,11 @@ void Server::start_server()
       _w_sig->set<Server, &Server::signal_cb>(this);
       _w_sig->start();
     }
+    if ((_w_seg = new ev::sig()) != nullptr) {
+      _w_seg->set(SIGSEGV);
+      _w_seg->set<Server, &Server::segment_cb>(this);
+      _w_seg->start();
+    }
     log("Proxy server is listening on [%s:%u]", _soc.gethostip().c_str(), _soc.getport());
     log("Web server is listening on [%s:%u]", _loc.gethostip().c_str(), _loc.getport());
     _loop->run();
@@ -263,6 +330,7 @@ void Server::stop_client()
   if (_w_loc != nullptr) { delete _w_loc; _w_loc = nullptr; }
   if (_w_tmo != nullptr) { delete _w_tmo; _w_tmo = nullptr; }
   if (_w_sig != nullptr) { delete _w_sig; _w_sig = nullptr; }
+  if (_w_seg != nullptr) { delete _w_seg; _w_seg = nullptr; }
   if (_loop  != nullptr) { delete _loop;  _loop  = nullptr; }
   if (_loc_addrinfo != nullptr) { _soc.resolve(nullptr, 0, &_loc_addrinfo); _loc_addrinfo = nullptr; }
   _loc.close(); // close socket
@@ -277,6 +345,7 @@ void Server::stop_server()
   if (_w_loc != nullptr) { delete _w_loc; _w_loc = nullptr; }
   if (_w_tmo != nullptr) { delete _w_tmo; _w_tmo = nullptr; }
   if (_w_sig != nullptr) { delete _w_sig; _w_sig = nullptr; }
+  if (_w_seg != nullptr) { delete _w_seg; _w_seg = nullptr; }
   if (_loop  != nullptr) { delete _loop;  _loop  = nullptr; }
   _loc.close();
   _soc.close();
@@ -285,10 +354,11 @@ void Server::stop_server()
 
 ////////////////////////////////////////////
 
-bool Server::web_hdrinfo(const Buffer& str, string& cmd, string& path)
+bool Server::web_hdrinfo(const void* ptr, size_t len, string& cmd, string& path)
 {
-  const char* p = (const char*) str.data();
+  const char* p = (const char*) ptr;
   const char* r = strchr(p, ' ');
+  const char* e = p + len;
 
   if (*r == ' ') {
     if (r - p > 0) {
@@ -298,7 +368,7 @@ bool Server::web_hdrinfo(const Buffer& str, string& cmd, string& path)
 
   for ( ; *r == ' '; ) r++;
 
-  if (*r != ' ' && *r != '\0' && *r == '/') {
+  if (r < e && *r != ' ' && *r != '\0' && *r == '/') {
     const char* q = strchr(r, ' ');
     const char* m = strchr(r, '\r');
     const char* n = strchr(r, '\n');
@@ -408,11 +478,11 @@ void Server::soc_new_connection(int fd, const char* ip, int port)
   SOCKS5* socks5 = new SOCKS5();
 
   if (ssl != nullptr && _tls.fd(ssl, fd) > 0 && _tls.accept(ssl) > 0 && soc_accept(ssl) && socks5 != nullptr && socks5->init(&_tls, ssl, fd, ip, port)) {
-    socks5->start(_timeout);
+    socks5->start(_multi, _timeout);
     _lst_socks5.push_back(socks5);
     log("New connection from [%s:%u]", ip, port);
     return;
-  } else perror("soc_new_connection");
+  } else if (errno != 0) perror("soc_new_connection");
 
   if (socks5 != nullptr) delete socks5;
   if (ssl != nullptr) _tls.close(ssl);
@@ -426,9 +496,8 @@ void Server::web_new_connection(int fd, const char* ip, int port)
   while ((len = _loc.recv(fd, buf, sizeof(buf))) > 0) {
     if (! done) {
       string cmd, path;
-      Buffer str; str.append(buf, len);
 
-      if (web_hdrinfo(str, cmd, path) && cmd == "GET") {
+      if (web_hdrinfo(buf, len, cmd, path) && cmd == "GET") {
         if (path == "/") {
           if (_loc.send(fd, _200_ctx.data(), _200_ctx.size()) > 0)
             okay = true;
@@ -456,11 +525,11 @@ void Server::loc_new_connection(int fd, const char* ip, int port)
   Client* cli = new Client();
 
   if (ssl != nullptr && cli != nullptr && cli->init(_soc.gethostip(), _soc.getport(), fd, &_tls, ssl, ip, port) && loc_accept(ssl)) {
-    cli->start(/*_timeout*/);
+    cli->start(_multi, _timeout);
     _lst_client.push_back(cli);
     log("New connection from [%s:%u]", ip, port);
     return;
-  } else perror("loc_new_connection");
+  } else if (errno != 0) perror("loc_new_connection");
 
   if (cli != nullptr) delete cli;
   if (ssl != nullptr) _tls.close(ssl);
@@ -470,19 +539,16 @@ void Server::loc_new_connection(int fd, const char* ip, int port)
 
 bool Server::soc_accept(SSL* ssl)
 {
-  Buffer res;
+  char buf[BUFSIZ * 4];
+  size_t len;
 
-  char buf[BUFSIZ];
-  int len;
+  if ((len = _tls.read(ssl, buf, sizeof(buf))) <= 0) return false;
 
-  while ((len = _tls.read(ssl, buf, sizeof(buf))) > 0) {
-    res.append(buf, len);
-    if ((unsigned) len < sizeof(buf)) break;
-  }
+  if (len >= sizeof(buf)) log("Request is too long");
 
   string cmd, path;
 
-  if (web_hdrinfo(res, cmd, path)) {
+  if (web_hdrinfo(buf, len, cmd, path)) {
     string ssr;
     if (_serial.c_str()[0] == '/')
       ssr = _serial;
@@ -492,6 +558,8 @@ bool Server::soc_accept(SSL* ssl)
     if (cmd == "GET" && path == ssr) {
       _tls.write(ssl, (void*) _200_ctx.data(), _200_ctx.size());
       return true;
+    } else if (cmd == "GET" && path == "/") {
+      _tls.write(ssl, (void*) _200_ctx.data(), _200_ctx.size());
     } else {
       _tls.write(ssl, (void*) _404_ctx.data(), _404_ctx.size());
     }
@@ -507,7 +575,7 @@ bool Server::loc_accept(SSL* ssl)
   req += _serial + " HTTP/1.1\r\nHost: ";
   req += _soc.gethostip() + ":";
 
-  char buf[64];
+  char buf[BUFSIZ * 4];
 
   snprintf(buf, sizeof(buf), "%u\r\n", _soc.getport());
 
@@ -519,15 +587,13 @@ bool Server::loc_accept(SSL* ssl)
     return false;
   }
 
-  Buffer res;
   size_t len;
 
-  while ((len = _tls.read(ssl, buf, sizeof(buf))) > 0) {
-    res.append(buf, len);
-    if ((unsigned) len < sizeof(buf)) break;
-  }
+  if ((len = _tls.read(ssl, buf, sizeof(buf))) <= 0) return false;
 
-  string str = string((const char*) res.data(), MIN(res.size(), 16));
+  if (len >= sizeof(buf)) log("Response is too long");
+
+  string str = string((const char*) buf, MIN(len, 16));
 
   if (! str.compare(9, 3, "200")) return true;
 
@@ -585,6 +651,15 @@ void Server::timeout_cb(ev::timer& w, int revents)
       } else it++;
     }
   }
+}
+
+void Server::segment_cb(ev::sig& w, int revents)
+{
+  void* array[16];
+  size_t size = backtrace(array, 16);
+  backtrace_symbols_fd(array, size, STDERR_FILENO);
+  log("Quitting...");
+  exit(EXIT_FAILURE);
 }
 
 void Server::signal_cb(ev::sig& w, int revents)

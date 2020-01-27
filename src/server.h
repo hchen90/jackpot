@@ -7,6 +7,7 @@
 #define	_SERVER_H_
 
 #include <string>
+#include <thread>
 #include <map>
 
 #include <ev++.h>
@@ -23,15 +24,19 @@ public:
   ~Client();
 
   bool init(const std::string& hostip, int port, int fd, TLS* tls, SSL* ssl, const std::string& ip_from, int port_from);
-  void start();
+  void start(bool multi, float tmo);
   void stop();
   bool done();
 private:
   void cleanup();
+  bool read_cli();
+  bool read_tls();
 
   void read_cli_cb(ev::io& w, int revents);
   void read_tls_cb(ev::io& w, int revents);
   void timeout_cb(ev::timer& w, int revents);
+
+  static void transfer_td(Client* self);
 
   Socks _host;
 
@@ -43,10 +48,13 @@ private:
   ev::io* _w_cli;
   ev::io* _w_tls;
 
-  bool _done;
+  bool _done, _multi, _running;
+  float _timeout;
 
   std::string _ip_from;
   int _port_from;
+
+  std::thread* _td_trf;
 };
 
 class Server {
@@ -57,14 +65,14 @@ public:
   bool client(const std::string& ip_tls, int port_tls, const std::string& ip_local, int port_local, const std::string& serial, const std::string& nmpwd, const std::string& pidfile); // local SOCKS5 server
   bool server(const std::string& ip_tls, int port_tls, const std::string& ip_web, int port_web, const std::string& serial, const std::string& nmpwd, const std::string& pidfile, const std::string& key, const std::string& cert, const std::string& page, float timeout); // remote SOCKS5-over-TLS server
 
-  void start();
+  void start(bool multi);
   void stop();
 
   bool running() const;
 private:
   bool pidfile(const std::string& pidfl);
 
-  bool web_hdrinfo(const Buffer& str, std::string& cmd, std::string& path);
+  bool web_hdrinfo(const void* ptr, size_t len, std::string& cmd, std::string& path);
   bool web_initpage(const std::string& page);
   bool nmpwd_init(const std::string& nmpwd, bool fl);
 
@@ -78,6 +86,7 @@ private:
   void loc_accept_cb(ev::io& w, int revents);
   void timeout_cb(ev::timer& w, int revents);
   void signal_cb(ev::sig& w, int revents);
+  void segment_cb(ev::sig& w, int revents);
 
   void soc_new_connection(int fd, const char* ip, int port);
   void web_new_connection(int fd, const char* ip, int port);
@@ -88,7 +97,7 @@ private:
 
   ///////////////////////////////////////////////
   
-  bool _running, _issrv;
+  bool _running, _issrv, _multi;
   float _timeout;
 
   TLS _tls;
@@ -112,6 +121,7 @@ private:
   ev::io* _w_loc;
   ev::timer* _w_tmo;
   ev::sig* _w_sig;
+  ev::sig* _w_seg;
 
   int _fd_lock;
 };
