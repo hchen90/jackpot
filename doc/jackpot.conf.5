@@ -1,0 +1,64 @@
+.\" $Id: jackpot.man,v 1.0 2019/12/28 20:23:41 lhf Exp $
+.TH JACKPOT 1 "28 January 2020"
+.SH NAME
+jackpot.conf - Jackpot's configuration file
+.SH SYNOPSIS
+jackpot.conf
+.SH DESCRIPTION
+This manual shows a pair of configuration samples for server and client.
+.SH EXAMPLES
+.PP
+A sample of server configuration file:
+.in +2n
+.EX
+\fI
+[main]
+private_key=sample.key
+certificate=sample.crt
+serial=123456789
+timeout=20
+pidfile=/var/run/jackpots.pid
+
+[user]
+user0=jacky:112233
+user1=bob:aaaaaa
+user2=alice:Tya67s%a$g)awUs>m"a
+
+[tls]
+ip=0.0.0.0
+port=443
+
+[web]
+ip=0.0.0.0
+port=80
+page=/user/share/doc/jackpot/page.html
+\fP
+.EE
+.in
+.PP
+A sample of client configuration file:
+.in +2n
+.EX
+\fI
+[main]
+serial=123456789
+timeout=20
+pidfile=/var/run/jackpotc.pid
+
+[tls]
+ip=example.com
+port=443
+
+[local]
+ip=0.0.0.0
+port=1080
+\fP
+.EE
+.in
+.SH SEE ALSO
+jackpot(1)
+.PP
+For more details please visit <https://jackpot-proxy.sourceforge.net/>.
+.SH AUTHOR
+Originally written by Hsiang Chen <a.chenxiang.z@gmail.com>.
+.\" EOF

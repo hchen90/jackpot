@@ -6,8 +6,6 @@ install_manifest.txt
 jackpot-*.tar.gz
 doc/CMakeFiles/
 doc/Makefile
-doc/sample.key
-doc/sample.cert
 doc/cmake_install.cmake
 doc/install_manifest.txt
 src/CMakeCache.txt
@@ -15,10 +13,7 @@ src/CMakeFiles/
 src/Makefile
 src/jackpot
 src/tags
-src/page.html
 src/sample.key
-src/sample.cert
-src/jackpot.conf
-src/users.lst
+src/sample.crt
 src/cmake_install.cmake
 src/install_manifest.txt

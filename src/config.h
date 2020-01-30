@@ -7,7 +7,7 @@
 #define	_CONFIG_H_
 
 #define PACKAGE_NAME "jackpot"
-#define PACKAGE_VERSION "1.2"
+#define PACKAGE_VERSION "1.3"
 #define PACKAGE_URL "https://github.com/hchen90/jackpot.git"
 #define PACKAGE_BUGREPORT "a.chenxiang.z@gmail.com"
 

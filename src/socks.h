@@ -14,7 +14,6 @@
 #include <poll.h>
 
 #include <string>
-#include <list>
 
 class Buffer;
 
@@ -25,7 +24,7 @@ public:
   
   int socket();
   int socket(int domain, int soctyp);
-  int listen(int backlog = 32);
+  int listen(int backlog = 0);
   int connect(const struct sockaddr* addr, socklen_t addr_len, int tags = 0x01);
   int connect(const char* hostip, int port, int tags = 0x01);
   int bind(const struct sockaddr* addr, socklen_t addr_len, int tags = 0x11, bool bd = true);

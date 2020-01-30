@@ -19,24 +19,54 @@
 #include <cstdarg>
 #include <cstring>
 #include <iostream>
+#include <mutex>
 
 #include "utils.h"
 
-void std::log(const std::string& format, ...)
-{
-  char buf[BUFSIZ];
-  va_list ap;
+static std::mutex _std_log_mutex, _std_err_mutex;
 
-  va_start(ap, format);
-  if (vsnprintf(buf, sizeof(buf), format.c_str(), ap) > 0) {
-    cout << "\r" << buf << endl;
-  }
+void utils::log(const std::string& fmt, ...)
+{
+  va_list ap;
+  va_start(ap, fmt);
+  utils::log(fmt, ap);
   va_end(ap);
 }
 
-void std::dump(const void* ptr, size_t len)
+void utils::log(const std::string& fmt, va_list ap)
 {
-  string str;
+  char buf[BUFSIZ];
+
+  if (vsnprintf(buf, sizeof(buf), fmt.c_str(), ap) > 0) {
+    _std_log_mutex.lock();
+    std::cout << "\r" << buf << std::endl;
+    _std_log_mutex.unlock();
+  }
+}
+
+void utils::error(const std::string& fmt, ...)
+{
+  va_list ap;
+  va_start(ap, fmt);
+
+  _std_err_mutex.lock();
+  char* serr = strerror(errno);
+  _std_err_mutex.unlock();
+
+  if (serr != nullptr) {
+    std::string format = fmt;
+    format += " (";
+    format += serr;
+    format += ")";
+    utils::log(format, ap);
+  }
+
+  va_end(ap);
+}
+
+void utils::dump(const void* ptr, size_t len)
+{
+  std::string str;
 
   size_t i, l;
 
@@ -103,4 +133,22 @@ void std::dump(const void* ptr, size_t len)
 
   log(str);
 }
+
+bool utils::token(const std::string& str, const std::string& delim, std::vector<std::string>& result)
+{
+  char* saveptr = nullptr,* ptr;
+  const char* dlm = delim.c_str();
+
+  for (ptr = (char*) str.c_str(); ; ptr = nullptr) {
+    char* s = strtok_r(ptr, dlm, &saveptr);
+    if (s != nullptr) {
+      result.push_back(s);
+    } else {
+      break;
+    }
+  }
+
+  return ! result.empty();
+}
+
 /*end*/

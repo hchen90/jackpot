@@ -6,11 +6,10 @@
 #ifndef	_SOCKS5_H_
 #define	_SOCKS5_H_
 
+#include <condition_variable>
 #include <string>
 #include <thread>
 #include <map>
-
-#include <ev++.h>
 
 #include "socks.h"
 #include "tls.h"
@@ -62,35 +61,31 @@ public:
   ~SOCKS5();
 
   bool init(TLS* tls, SSL* ssl, int fd, const std::string& ip_from, int port_from);
-  void start(bool multi, float tmo);
+  void start(std::condition_variable* cv, time_t tmo);
   void stop();
   bool done();
 
   void nmpwd(std::map<std::string, std::string>* nmpwd);
 private:
   void cleanup();
+  void timeout();
   bool read_tls();
   bool read_tgt();
-  void timeout();
-
-  void read_tls_cb(ev::io& w, int revents);
-  void read_tgt_cb(ev::io& w, int revents);
-  void timeout_cb(ev::timer& w, int revents);
 
   short stage_init(void* ptr, size_t len);
   short stage_auth(void* ptr, size_t len);
   short stage_requ(void* ptr, size_t len);
-  short stage_conn(void* ptr, size_t len);
-  short stage_bind(void* ptr, size_t len);
-  short stage_udpp(void* ptr, size_t len);
 
-  static void read_tls_td(SOCKS5* self);
-  static void read_tgt_td(SOCKS5* self);
+  short stage_conn();
+  short stage_bind();
+  short stage_udpp();
+
+  static void socks5_td(SOCKS5* self);
 
   int _fd_tls, _port_from;
-  bool _done, _multi, _running;
+  bool _done, _running;
   short _stage;
-  float _timeout;
+  time_t _timeout;
 
   std::string _ip_from;
   std::map<std::string, std::string>* _nmpwd;
@@ -100,12 +95,8 @@ private:
   TLS* _tls;
   SSL* _ssl;
 
-  ev::io* _w_tls;
-  ev::io* _w_tgt;
-  ev::timer* _w_tmo;
-
-  std::thread* _td_tls;
-  std::thread* _td_tgt;
+  std::thread* _td_socks5;
+  std::condition_variable* _cv_cleanup;
 };
 
 #endif	/* _SOCKS5_H_ */

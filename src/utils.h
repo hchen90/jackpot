@@ -7,10 +7,14 @@
 #define	_UTILS_H_
 
 #include <string>
+#include <vector>
 
-namespace std {
-  void log(const std::string& format, ...);
+namespace utils {
+  void log(const std::string& fmt, ...);
+  void log(const std::string& fmt, va_list ap);
+  void error(const std::string& fmt, ...);
   void dump(const void* ptr, size_t len);
+  bool token(const std::string& str, const std::string& delim, std::vector<std::string>& result);
 };
 
 #endif	/* _UTILS_H_ */

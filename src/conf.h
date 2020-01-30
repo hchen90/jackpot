@@ -1,5 +1,5 @@
 /* $ @conf.h
- * Copyright (C) 2018 Hsiang Chen
+ * Copyright (C) 2020 Hsiang Chen
  * This software is free software,you can redistributed in the term of GNU Public License.
  * For detail see <http://www.gnu.org/licenses>
  * */

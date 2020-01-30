@@ -1,134 +1,86 @@
 .\" $Id: jackpot.man,v 1.0 2019/12/28 20:23:41 lhf Exp $
-.TH JACKPOT 1 "2019/12/28"
+.TH JACKPOT 1 "28 January 2020"
 .SH NAME
-jackpot \- A SOCKS5 over TLS proxy
+jackpot \- A SOCKS5-over-TLS Proxy
 .SH SYNOPSIS
-.B jackpot
-[
-.I options
-]
-[
-.I args
-]
+\fBjackpot\fP [\fIoptions\fP] [\fIargs\fP]
 .SH DESCRIPTION
-.B jackpot
-is a SOCKS5 over TLS proxy. It works as same as HTTPS protocol, whom highly secured communications over internet.
+\fBJackpot\fP is a SOCKS5-over-TLS proxy. It works as same as HTTPS protocol, whom highly secured communications over internet.
 .PP
-As so far, we call it SOCKS5 over TLS. But it's not just a SOCKS5 proxy directly over TLS layer. Client attempts to establish SOCKS5 connection over TLS, who must hit
-.B jackpot
-in server side. A
-.B jackpot
-usually is a serial string. The connection between client and server would switch HTTP to SOCKS5 once a
-.B jackpot
-been hit.
+Jackpot is made of two parts, tiny HTTP service and SOCKS5 service. After a connection to server from client has been established. Jackpot server side would switch client into SOCKS5 tunnel only if client sent matched serial (jackpot has been hit). Otherwise, client would float above HTTP level.
 .PP
-.B jackpot
-also support feature of username and password verification in SOCKS5.
+\fBJackpot\fP also support feature of username and password verification in SOCKS5 tunnel.
 .SH OPTIONS
 .TP
-.BI \-h
+\fB-h\fP
 show this help.
 .TP
-.BI \-v
+\fB-v\fP
 show version info.
 .TP
-.BI \-i " tip"
-set ip address of TLS-binding to (
-.IR tip
-).
+\fB-i\fP \fItip\fP
+set ip address to \fItip\fP for TLS-binding.
 .TP
-.BI \-p " tport"
-set port number of TLS-binding to (
-.IR tport
-).
+\fB-p\fP \fItport\fP
+set port number to \fItport\fP for TLS-binding.
 .TP
-.BI \-k " private_key"
-set private key to (
-.IR private_key
-) for TLS.
+\fB-k\fP \fIprivate_key\fP
+set private key to \fIprivate_key\fP for tls.
 .TP
-.BI \-c " certificate"
-set
-.IR certificate
-for TLS.
+\fB-c\fP \fIcertificate\fP
+set \fIcertificate\fP file for tls.
 .TP
-.BI \-s " serial"
-set serial string to (
-.IR serial
-).
+\fB-s\fP \fIserial\fP
+set \fIserial\fP string.
 .TP
-.BI \-e " page"
-set web page file to (
-.IR page
-) for HTTP responses.
+\fB-e\fP \fIpage\fP
+set web \fIpage\fP file for HTTP responses.
 .TP
-.BI \-a " wip"
-set ip address of web service (server endpoint) or SOCKS5 server (client endpoint) to (
-.IR wip
-).
+\fB-a\fP \fIwip\fP
+set ip address of Web server (server endpoint) or SOCKS5 server (client endpoint) to \fIwip\fP.
 .TP
-.BI \-w " wport"
-set port number of web service (server endpoint) or SOCKS5 server (client endpoint) to (
-.IR wport
-).
+\fB-w\fP \fIwport\fP
+set port number of Web server (server endpoint) or SOCKS5 server (client endpoint) to \fIwport\fP.
 .TP
-.BI \-t " timeout"
-set
-.IR timeout
-for events scheduler.
+\fB-t\fP \fItimeout\fP
+set \fItimeout\fP.
 .TP
-.BI \-x " nmpwd"
-set username and password to (
-.IR nmpwd
-), this argument is a file in server endpoint and a string-pair in client.
+\fB-m\fP \fIpidfile\fP
+set PID file to \fIpidfile\fP.
+.TP
+\fB-n\fP \fIcfgfile\fP
+set configuration file to \fIcfgfile\fP.
 .SH EXAMPLE
-If we already have a host running on internet, whose adddress is [11.22.33.44], then we setup a server whose TLS-endpoint would listening on port 433, and whose web service would listening on port 80. Also, the private key (
-.I key.pem
-)and certificate (
-.I cert.pem
-) file all prepared. And (
-.I hello
-) is the serial string. The command should look like this:
+If we have a host running on internet, whose adddress is [11.22.33.44], then we setup a server whose TLS-endpoint would listening on port 433, and whose web service would listening on port 80. And private key (\fIkey.pem\fP) and certificate file (\fIcert.pem\fP) all prepared. Also we take the string (\fIhello\fP) as serial. The command should look like this:
 .TP
-.I jackpot -i 11.22.33.44 -p 433 -a 11.22.33.44 -w 80 -k key.pem -c cert.pem -s hello
-As you can see, we didn't set (
-.I timeout
-) and (
-.I nmpwd
-). In this case, this server would use default timeout (20 seconds) and no username/password verification.
+\fIjackpot -i 11.22.33.44 -p 433 -a 11.22.33.44 -w 80 -k key.pem -c cert.pem -s hello\fP
+As you can see, we didn't set (\fItimeout\fP). In this case, this server would use default timeout (20 seconds).
 .PP
 We can do the same function by simplify command like this:
 .TP
-.I jackpot -k key.pem -c cert.pem -s hello
+\fIjackpot -k key.pem -c cert.pem -s hello\fP
 If we don't set its ip address and port, it will uses the default values (both ip: 0.0.0.0, tport:443, wport: 80).
 .PP
-If we want the server to have username/password verification, we should prepare a file (we name it:
-.I users.lst
-). Assume its content:
+If we want server to have username/password verification, we should add verified users to its configuration file and load from it. Here is a draft of users:
 .in +7n
 .EX
-alice:a1s2d3f4
-bob:qaaaa@@@33
+\fI
+[user]
+user0=alice:a1s2d3f4
+user1=bob:qaaaa@@@33
+\fP
 .EE
 .in
 .PP
-Then we append (
-.I \-x users.lst
-) to arguments and restart it.
+Then add configuration file to arguments and restart server.
 .PP
 For client side, we can connect above server in this way:
 .TP
-.I jackpot -i 11.22.33.44 -p 433 -a 127.0.0.1 -w 1080 -s hello
-You can also simplify command by ignoring all arguments except (
-.I tip
-) and (
-.I serial
-).
-.PP
-If server uses username/password verification, we can append (
-.I \-x alice:a1s2d3f4
-) to arguments.
+\fIjackpot -i 11.22.33.44 -p 433 -a 127.0.0.1 -w 1080 -s hello\fP
+You can also simplify command by ignoring all arguments except (\fItip\fP) and (\fIserial\fP).
 .SH SEE ALSO
+jackpot.conf(5)
+.PP
 For more details please visit <https://jackpot-proxy.sourceforge.net/>.
 .SH AUTHOR
 Originally written by Hsiang Chen <a.chenxiang.z@gmail.com>.

@@ -33,10 +33,11 @@
 #define DEF_TIMEOUT 20
 
 using namespace std;
+using namespace utils;
 
 /////////////////////////////////////////////////
 
-Client::Client() : _tls(nullptr), _ssl(nullptr), _fd_cli(-1), _w_cli(nullptr), _w_tls(nullptr), _done(false), _multi(false), _running(false), _timeout(DEF_TIMEOUT), _port_from(0), _td_trf(nullptr) {}
+Client::Client() : _tls(nullptr), _ssl(nullptr), _fd_cli(-1), _done(false), _running(false), _timeout(DEF_TIMEOUT), _port_from(0), _td_trf(nullptr), _cv_cleanup(nullptr) {}
 
 Client::~Client() { cleanup(); }
 
@@ -54,48 +55,26 @@ bool Client::init(const string& hostip, int port, int fd, TLS* tls, SSL* ssl, co
   return false;
 }
 
-void Client::start(bool multi, float tmo)
+void Client::start(condition_variable* cv, time_t tmo)
 {
-  _multi = multi;
-  _timeout = tmo;
-  _running = true;
-
-  if (multi) {
-    if ((_td_trf = new thread(transfer_td, this)) != nullptr) {
-      _td_trf->detach();
-    }
-  } else {
-    if ((_w_cli = new ev::io()) != nullptr) {
-      _w_cli->set(_fd_cli, ev::READ);
-      _w_cli->set<Client, &Client::read_cli_cb>(this);
-      _w_cli->start();
-    }
-    if ((_w_tls = new ev::io()) != nullptr) {
-      _w_tls->set(_host.socket(), ev::READ);
-      _w_tls->set<Client, &Client::read_tls_cb>(this);
-      _w_tls->start();
-    }
-    /*if ((_w_tmo = new ev::timer()) != nullptr) {
-      _w_tmo->set(tmo, 0);
-      _w_tmo->set<Client, &Client::timeout_cb>(this);
-      _w_tmo->start();
-    }*/
+  if ((_td_trf = new thread(transfer_td, this)) != nullptr) {
+    _td_trf->detach();
+    _cv_cleanup = cv;
+    _timeout = tmo;
+    _running = true;
   }
 }
 
 void Client::stop()
 {
-  _running = false;
-
-  if (_multi) {
-    if (_td_trf != nullptr) { delete _td_trf; _td_trf = nullptr; }
-  } else {
-    if (_w_cli != nullptr) { delete _w_cli; _w_cli = nullptr; }
-    if (_w_tls != nullptr) { delete _w_tls; _w_tls = nullptr; }
-    //if (_w_tmo != nullptr) { delete _w_tmo; _w_tmo = nullptr; }
+  if (_running) {
+    if (_td_trf != nullptr) {
+      delete _td_trf;
+      _td_trf = nullptr;
+    }
+    _done = true;
+    _running = false;
   }
-
-  _done = true;
 }
 
 bool Client::done()
@@ -112,44 +91,46 @@ void Client::cleanup()
   _host.close();
 
   log("Closing connection [%s:%u]", _ip_from.c_str(), _port_from);
+
+  if (_cv_cleanup != nullptr) {
+    _cv_cleanup->notify_one();
+  }
 }
 
 bool Client::read_cli()
 {
+  bool okay = true;
   char buf[BUFSIZ];
-  ssize_t len;
+  ssize_t len, sent = 0;
 
   if ((len = _host.recv(_fd_cli, buf, sizeof(buf))) > 0) {
-    _tls->write(_ssl, buf, len);
-    return true;
-  } else {
-    if (errno != 0) perror("read_cli");
-    return false;
-  }
+    while (len > sent) {
+      int num = _tls->write(_ssl, buf, len);
+      if (num > 0) sent += num;
+      else { okay = false; break; }
+    }
+  } else okay = false;
+
+  if (! okay && errno != 0) error("read_cli");
+  return okay;
 }
 
 bool Client::read_tls()
 {
+  bool okay = true;
   char buf[BUFSIZ];
-  ssize_t len;
+  ssize_t len, sent = 0;
 
   if ((len = _tls->read(_ssl, buf, sizeof(buf))) > 0) {
-    _host.send(_fd_cli, buf, len);
-    return true;
-  } else {
-    if (errno != 0) perror("read_tls");
-    return false;
-  }
-}
+    while (len > sent) {
+      int num = _host.send(_fd_cli, buf, len);
+      if (num > 0) sent += num;
+      else { okay = false; break; }
+    }
+  } else okay = false;
 
-void Client::read_cli_cb(ev::io& w, int revents)
-{
-  if (! read_cli()) cleanup();
-}
-
-void Client::read_tls_cb(ev::io& w, int revents)
-{
-  if (! read_tls()) cleanup();
+  if (! okay && errno != 0) error("read_tls");
+  return okay;
 }
 
 void Client::transfer_td(Client* self)
@@ -162,7 +143,7 @@ void Client::transfer_td(Client* self)
   FD_SET(fd, &rfds);
   FD_SET(self->_fd_cli, &rfds);
 
-  struct timeval tmv = { .tv_sec = (time_t) self->_timeout, .tv_usec = 0 };
+  struct timeval tmv = { .tv_sec = self->_timeout, .tv_usec = 0 };
 
   while (self->_running) {
     memcpy(&fds, &rfds, sizeof(fds));
@@ -173,7 +154,10 @@ void Client::transfer_td(Client* self)
       } else { // from client
         if (! self->read_cli()) break;
       }
-    } else break;
+    } else {
+      if (errno == EINTR) continue;
+      break;
+    }
   }
 
   self->cleanup();
@@ -184,63 +168,113 @@ void Client::transfer_td(Client* self)
 Server::Server() : 
   _running(false),
   _issrv(false),
-  _multi(false),
   _timeout(DEF_TIMEOUT),
   _loc_addrinfo(nullptr),
   _loop(nullptr), 
   _w_soc(nullptr),
   _w_loc(nullptr),
-  _w_tmo(nullptr),
   _w_sig(nullptr),
-  _w_seg(nullptr) {}
+  _w_seg(nullptr),
+  _td_cleanup(nullptr) {}
 
 Server::~Server()
 {
   if (! access(_pidfile.c_str(), F_OK)) remove(_pidfile.c_str());
 }
 
-bool Server::client(const string& ip_tls, int port_tls, const string& ip_local, int port_local, const string& serial, const string& nmpwd, const string& pidfl)
+bool Server::client(Conf& cfg)
 {
-  if (! _tls.init()) {
-    _tls.error();
-    return false;
+  if (! _tls.init()) { _tls.error(); return false; }
+
+  string pidfl;
+  
+  if (cfg.get("main", "pidfile", pidfl) && ! pidfile(pidfl)) return false;
+
+  if (! cfg.get("main", "serial", _serial)) return false;
+
+  string timeout;
+
+  if (cfg.get("main", "timeout", timeout)) {
+    _timeout = MIN(TMO_MIN, MAX(TMO_MIN, atol(timeout.c_str())));
   }
-  if (! pidfl.empty() && ! pidfile(pidfl)) {
-    return false;
-  }
-  if (_soc.resolve(ip_tls.c_str(), port_tls, &_loc_addrinfo) != -1 && \
-      _loc.bind(ip_local.c_str(), port_local) != -1 && _loc.listen() != -1) {
-    if (! nmpwd.empty()) nmpwd_init(nmpwd, false);
-    _serial = serial;
+
+  string ip_tls, port_tls;
+
+  if (! cfg.get("tls", "ip", ip_tls)) return false;
+  if (! cfg.get("tls", "port", port_tls)) port_tls = "443";
+
+  string ip_local, port_local;
+
+  if (! cfg.get("local", "ip", ip_local)) ip_local = "0.0.0.0";
+  if (! cfg.get("local", "port", port_local)) port_local = "1080";
+
+  int port_tls_n = atoi(port_tls.c_str()), port_local_n = atoi(port_local.c_str());
+
+  if (port_tls_n <= 0) port_tls_n = 443;
+  if (port_local_n <= 0) port_local_n = 1080;
+
+  if (_soc.resolve(ip_tls.c_str(), port_tls_n, &_loc_addrinfo) != -1 && \
+      _loc.bind(ip_local.c_str(), port_local_n) != -1 && _loc.listen() != -1) {
     _running = true;
     return true;
-  } else perror("socket");
-  return false;
+  } else {
+    error("client()");
+    return false;
+  }
 }
 
-bool Server::server(const string& ip_tls, int port_tls, const string& ip_web, int port_web, const string& serial, const string& nmpwd, const string& pidfl, const string& key, const string& cert, const string& page, float timeout)
+bool Server::server(Conf& cfg)
 {
-  if (! _tls.init(key, cert)) {
-    _tls.error();
-    return false;
+  string key, cert;
+
+  if (cfg.get("main", "private_key", key) && cfg.get("main", "certificate", cert)) {
+    if (! _tls.init(key, cert)) { _tls.error(); return false; }
   }
-  if (! pidfl.empty() && ! pidfile(pidfl)) {
-    return false;
+
+  string pidfl;
+  
+  if (cfg.get("main", "pidfile", pidfl) && ! pidfile(pidfl)) return false;
+
+  if (! cfg.get("main", "serial", _serial)) return false;
+
+  string timeout;
+
+  if (cfg.get("main", "timeout", timeout)) {
+    _timeout = MIN(TMO_MIN, MAX(TMO_MIN, atol(timeout.c_str())));
   }
-  if (_soc.bind(ip_tls.c_str(), port_tls) != -1 && _soc.listen() != -1 && \
-      _loc.bind(ip_web.c_str(), port_web) != -1 && _loc.listen() != -1) {
-    if (! nmpwd.empty()) nmpwd_init(nmpwd, true);
+
+  string ip_tls, port_tls;
+
+  if (! cfg.get("tls", "ip", ip_tls)) ip_tls = "0.0.0.0";
+  if (! cfg.get("tls", "port", port_tls)) port_tls = "443";
+  
+  string ip_web, port_web, page;
+
+  cfg.get("web", "page", page);
+
+  if (! cfg.get("web", "ip", ip_web)) ip_web = "0.0.0.0";
+  if (! cfg.get("web", "port", port_web)) port_web = "80";
+
+  int port_tls_n = atoi(port_tls.c_str()), port_web_n = atoi(port_web.c_str());
+
+  if (port_tls_n <= 0) port_tls_n = 443;
+  if (port_web_n <= 0) port_web_n = 80;
+ 
+  if (_soc.bind(ip_tls.c_str(), port_tls_n) != -1 && _soc.listen() != -1 && \
+      _loc.bind(ip_web.c_str(), port_web_n) != -1 && _loc.listen() != -1) {
     if (! web_initpage(page)) {
       _200_ctx = DEF_CTX_SUCCESS;
       _400_ctx = DEF_CTX_BADREQUEST;
       _404_ctx = DEF_CTX_NOTFOUND;
     }
-    _serial = serial;
-    _timeout = timeout;
+    socks5_initnmpwd(cfg);
     _running = true;
-    return _issrv = true;
-  } else perror("socket");
-  return false;
+    _issrv = true;
+    return true;
+  } else {
+    error("server()");
+    return false;
+  }
 }
 
 bool Server::pidfile(const string& pidfl)
@@ -258,7 +292,7 @@ bool Server::pidfile(const string& pidfl)
   } else return false;
 }
 
-void Server::start(bool multi) { _multi = multi; if (_issrv) start_server(); else start_client(); }
+void Server::start() { if (_issrv) start_server(); else start_client(); }
 
 void Server::stop() { if (_issrv) stop_server(); else stop_client(); }
 
@@ -272,16 +306,12 @@ void Server::start_client()
       _w_loc->set<Server, &Server::loc_accept_cb>(this);
       _w_loc->start();
     }
-    if ((_w_tmo = new ev::timer()) != nullptr) {
-      _w_tmo->set(0, MIN(TMO_MAX, MAX(TMO_MIN, _timeout)));
-      _w_tmo->set<Server, &Server::timeout_cb>(this);
-      _w_tmo->start();
-    }
     if ((_w_sig = new ev::sig()) != nullptr) {
       _w_sig->set(SIGINT);
       _w_sig->set<Server, &Server::signal_cb>(this);
       _w_sig->start();
     }
+    _td_cleanup = new thread(cleanup_td, this);
     log("SOCKS5 server is listening on [%s:%u]", _loc.gethostip().c_str(), _loc.getport());
     _loop->run();
   } else _running = false;
@@ -302,11 +332,6 @@ void Server::start_server()
       _w_loc->set<Server, &Server::web_accept_cb>(this);
       _w_loc->start();
     }
-    if ((_w_tmo = new ev::timer()) != nullptr) {
-      _w_tmo->set(0, MIN(TMO_MAX, MAX(TMO_MIN, _timeout)));
-      _w_tmo->set<Server, &Server::timeout_cb>(this);
-      _w_tmo->start();
-    }
     if ((_w_sig = new ev::sig()) != nullptr) {
       _w_sig->set(SIGINT);
       _w_sig->set<Server, &Server::signal_cb>(this);
@@ -317,6 +342,7 @@ void Server::start_server()
       _w_seg->set<Server, &Server::segment_cb>(this);
       _w_seg->start();
     }
+    _td_cleanup = new thread(cleanup_td, this);
     log("Proxy server is listening on [%s:%u]", _soc.gethostip().c_str(), _soc.getport());
     log("Web server is listening on [%s:%u]", _loc.gethostip().c_str(), _loc.getport());
     _loop->run();
@@ -325,31 +351,41 @@ void Server::start_server()
 
 void Server::stop_client()
 {
-  for (auto& it : _lst_client) delete it;
-  _lst_client.clear();
   if (_w_loc != nullptr) { delete _w_loc; _w_loc = nullptr; }
-  if (_w_tmo != nullptr) { delete _w_tmo; _w_tmo = nullptr; }
   if (_w_sig != nullptr) { delete _w_sig; _w_sig = nullptr; }
   if (_w_seg != nullptr) { delete _w_seg; _w_seg = nullptr; }
   if (_loop  != nullptr) { delete _loop;  _loop  = nullptr; }
   if (_loc_addrinfo != nullptr) { _soc.resolve(nullptr, 0, &_loc_addrinfo); _loc_addrinfo = nullptr; }
-  _loc.close(); // close socket
   _running = false;
+  if (_td_cleanup != nullptr) {
+    _cv_cleanup.notify_one();
+    _td_cleanup->join();
+    delete _td_cleanup;
+    _td_cleanup = nullptr;
+  }
+  for (auto& it : _lst_client) delete it;
+  _lst_client.clear();
+  _loc.close(); // close socket
 }
 
 void Server::stop_server()
 {
-  for (auto& it : _lst_socks5) delete it;
-  _lst_socks5.clear();
   if (_w_soc != nullptr) { delete _w_soc; _w_soc = nullptr; }
   if (_w_loc != nullptr) { delete _w_loc; _w_loc = nullptr; }
-  if (_w_tmo != nullptr) { delete _w_tmo; _w_tmo = nullptr; }
   if (_w_sig != nullptr) { delete _w_sig; _w_sig = nullptr; }
   if (_w_seg != nullptr) { delete _w_seg; _w_seg = nullptr; }
   if (_loop  != nullptr) { delete _loop;  _loop  = nullptr; }
+  _running = false;
+  if (_td_cleanup != nullptr) {
+    _cv_cleanup.notify_one();
+    _td_cleanup->join();
+    delete _td_cleanup;
+    _td_cleanup = nullptr;
+  }
+  for (auto& it : _lst_socks5) delete it;
+  _lst_socks5.clear();
   _loc.close();
   _soc.close();
-  _running = false;
 }
 
 ////////////////////////////////////////////
@@ -418,56 +454,28 @@ bool Server::web_initpage(const string& page)
     fin.close();
     return true;
   } else {
-    perror(page.c_str());
+    error(page.c_str());
     return false;
   }
 }
 
-bool Server::nmpwd_init(const string& nmpwd, bool fl)
+void Server::socks5_initnmpwd(Conf& cfg)
 {
-  bool okay = false;
+  char key[64];
+  int count = 0;
+  bool okay = true;
 
-  if (fl) {
-    ifstream fin(nmpwd.c_str(), ios::in);
-    string line;
-
-    if (fin.good()) {
-      while (true) {
-        if (getline(fin, line)) {
-          const char* s = line.c_str();
-          const char* d = strchr(s, ':');
-          const char* e = s + line.size();
-
-          string name, passwd;
-
-          if (s < d) name = string(s, d - s);
-          if (d < e) passwd  = string(d + 1, e - d - 1);
-
-          if (! name.empty() && ! passwd.empty()) {
-            _nmpwd.insert(make_pair(name, passwd));
-            okay = true;
-          }
+  while (okay) {
+    if (snprintf(key, sizeof(key), "user%u", count++) > 0) {
+      string value;
+      if (cfg.get("user", key, value)) {
+        vector<string> res;
+        if (token(value, ":", res) && res.size() > 1) {
+          _nmpwd.insert(make_pair(res[0], res[1]));
         }
-      }
-      fin.close();
-    }
-  } else {
-    const char* s = nmpwd.c_str();
-    const char* d = strchr(s, ':');
-    const char* e = s + nmpwd.size();
-
-    string name, passwd;
-
-    if (s < d) name = string(s, d - s);
-    if (d < e) passwd = string(d + 1, e - d - 1);
-
-    if (! name.empty() && ! passwd.empty()) {
-      _nmpwd.insert(make_pair(name, passwd));
-      okay = true;
-    }
+      } else okay = false;
+    } else okay = false;
   }
-
-  return okay;
 }
 
 ////////////////////////////////////////////
@@ -478,11 +486,12 @@ void Server::soc_new_connection(int fd, const char* ip, int port)
   SOCKS5* socks5 = new SOCKS5();
 
   if (ssl != nullptr && _tls.fd(ssl, fd) > 0 && _tls.accept(ssl) > 0 && soc_accept(ssl) && socks5 != nullptr && socks5->init(&_tls, ssl, fd, ip, port)) {
-    socks5->start(_multi, _timeout);
+    socks5->nmpwd(&_nmpwd);
+    socks5->start(&_cv_cleanup, _timeout);
     _lst_socks5.push_back(socks5);
     log("New connection from [%s:%u]", ip, port);
     return;
-  } else if (errno != 0) perror("soc_new_connection");
+  } else if (errno != 0) error("soc_new_connection");
 
   if (socks5 != nullptr) delete socks5;
   if (ssl != nullptr) _tls.close(ssl);
@@ -525,11 +534,11 @@ void Server::loc_new_connection(int fd, const char* ip, int port)
   Client* cli = new Client();
 
   if (ssl != nullptr && cli != nullptr && cli->init(_soc.gethostip(), _soc.getport(), fd, &_tls, ssl, ip, port) && loc_accept(ssl)) {
-    cli->start(_multi, _timeout);
+    cli->start(&_cv_cleanup, _timeout);
     _lst_client.push_back(cli);
     log("New connection from [%s:%u]", ip, port);
     return;
-  } else if (errno != 0) perror("loc_new_connection");
+  } else if (errno != 0) error("loc_new_connection");
 
   if (cli != nullptr) delete cli;
   if (ssl != nullptr) _tls.close(ssl);
@@ -539,7 +548,7 @@ void Server::loc_new_connection(int fd, const char* ip, int port)
 
 bool Server::soc_accept(SSL* ssl)
 {
-  char buf[BUFSIZ * 4];
+  char buf[MAX(BUFSIZ, 1024)];
   size_t len;
 
   if ((len = _tls.read(ssl, buf, sizeof(buf))) <= 0) return false;
@@ -575,7 +584,7 @@ bool Server::loc_accept(SSL* ssl)
   req += _serial + " HTTP/1.1\r\nHost: ";
   req += _soc.gethostip() + ":";
 
-  char buf[BUFSIZ * 4];
+  char buf[MAX(BUFSIZ, 1024)];
 
   snprintf(buf, sizeof(buf), "%u\r\n", _soc.getport());
 
@@ -609,7 +618,7 @@ void Server::soc_accept_cb(ev::io& w, int revents)
 
   if (fd != -1) {
     soc_new_connection(fd, ip, port);
-  } else perror("soc_accept");
+  } else error("soc_accept");
 }
 
 void Server::web_accept_cb(ev::io& w, int revents)
@@ -619,7 +628,7 @@ void Server::web_accept_cb(ev::io& w, int revents)
 
   if (fd != -1) {
     web_new_connection(fd, ip, port);
-  } else perror("web_accept");
+  } else error("web_accept");
 }
 
 void Server::loc_accept_cb(ev::io& w, int revents)
@@ -629,28 +638,7 @@ void Server::loc_accept_cb(ev::io& w, int revents)
 
   if (fd != -1) {
     loc_new_connection(fd, ip, port);
-  } else perror("loc_accept");
-}
-
-void Server::timeout_cb(ev::timer& w, int revents)
-{
-  if (_issrv) {
-    for (auto it = _lst_socks5.begin(); it != _lst_socks5.end(); ) {
-      if ((*it)->done()) {
-        auto lt = it; lt++;
-        _lst_socks5.erase(it);
-        it = lt;
-      } else it++;
-    }
-  } else {
-    for (auto it = _lst_client.begin(); it != _lst_client.end(); ) {
-      if ((*it)->done()) {
-        auto lt = it; lt++;
-        _lst_client.erase(it);
-        it = lt;
-      } else it++;
-    }
-  }
+  } else error("loc_accept");
 }
 
 void Server::segment_cb(ev::sig& w, int revents)
@@ -671,9 +659,29 @@ void Server::signal_cb(ev::sig& w, int revents)
 
 ////////////////////////////////////////////
 
-bool Server::running() const
+void Server::cleanup_td(Server* self)
 {
-  return _running;
+  while (self->_running) {
+    unique_lock<mutex> lck(self->_mutex_cleanup);
+    self->_cv_cleanup.wait(lck);
+    if (self->_issrv) {
+      for (auto it = self->_lst_socks5.begin(); it != self->_lst_socks5.end(); ) {
+        if ((*it)->done()) {
+          auto lt = it; lt++;
+          self->_lst_socks5.erase(it);
+          it = lt;
+        } else it++;
+      }
+    } else {
+      for (auto it = self->_lst_client.begin(); it != self->_lst_client.end(); ) {
+        if ((*it)->done()) {
+          auto lt = it; lt++;
+          self->_lst_client.erase(it);
+          it = lt;
+        } else it++;
+      }
+    }
+  }
 }
 
 /*end*/

@@ -28,7 +28,6 @@
 
 #include "config.h"
 #include "socks.h"
-#include "utils.h"
 
 using namespace std;
 
