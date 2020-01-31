@@ -21,13 +21,15 @@
 #define TMO_MAX 50
 #define TMO_MIN 5
 
+class Server;
+
 class Client {
 public:
   Client();
   ~Client();
 
-  bool init(const std::string& hostip, int port, int fd, TLS* tls, SSL* ssl, const std::string& ip_from, int port_from);
-  void start(std::condition_variable* cv, time_t tmo);
+  void start(Server* srv, int fd, const std::string& ip_from, int port_from);
+  /*const std::string& hostip, int port, int fd, TLS* tls, --SSL* ssl--, const std::string& ip_from, int port_from, std::condition_variable* cv, time_t tmo, const std::string& serial*/
   void stop();
   bool done();
 private:
@@ -35,7 +37,10 @@ private:
   bool read_cli();
   bool read_tls();
 
-  static void transfer_td(Client* self);
+  bool init(Server* srv, int fd, const std::string& ip_from, int port_from);
+  void transfer();
+
+  static void client_td(Client* self, Server* srv, int fd, const std::string& ip_from, int port_from);
 
   Socks _host;
 
@@ -44,7 +49,7 @@ private:
 
   int _fd_cli;
 
-  bool _done, _multi, _running;
+  bool _done, _valid, _running;
   time_t _timeout;
 
   std::string _ip_from;
@@ -85,8 +90,8 @@ private:
   void web_new_connection(int fd, const char* ip, int port);
   void loc_new_connection(int fd, const char* ip, int port);
 
-  bool soc_accept(SSL* ssl);
   bool loc_accept(SSL* ssl);
+  bool soc_accept(SSL* ssl);
 
   static void cleanup_td(Server* self);
 
@@ -120,6 +125,9 @@ private:
   std::condition_variable _cv_cleanup;
   std::mutex _mutex_cleanup;
   std::thread* _td_cleanup;
+
+  friend Client;
+  friend SOCKS5;
 };
 
 #endif	/* _SERVER_H_ */

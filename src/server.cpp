@@ -37,31 +37,14 @@ using namespace utils;
 
 /////////////////////////////////////////////////
 
-Client::Client() : _tls(nullptr), _ssl(nullptr), _fd_cli(-1), _done(false), _running(false), _timeout(DEF_TIMEOUT), _port_from(0), _td_trf(nullptr), _cv_cleanup(nullptr) {}
+Client::Client() : _tls(nullptr), _ssl(nullptr), _fd_cli(-1), _done(false), _valid(true), _running(false), _timeout(DEF_TIMEOUT), _port_from(0), _td_trf(nullptr), _cv_cleanup(nullptr) {}
 
 Client::~Client() { cleanup(); }
 
-bool Client::init(const string& hostip, int port, int fd, TLS* tls, SSL* ssl, const string& ip_from, int port_from)
+void Client::start(Server* srv, int fd, const string& ip_from, int port_from)
 {
-  if (_host.connect(hostip.c_str(), port) != -1 && tls->fd(ssl, _host.socket()) > 0 && tls->connect(ssl) > 0) {
-    _fd_cli = fd;
-    _tls = tls;
-    _ssl = ssl;
-    _ip_from = ip_from;
-    _port_from = port_from;
-    return true;
-  }
-
-  return false;
-}
-
-void Client::start(condition_variable* cv, time_t tmo)
-{
-  if ((_td_trf = new thread(transfer_td, this)) != nullptr) {
+  if (! _running && (_td_trf = new thread(client_td, this, srv, fd, ip_from, port_from)) != nullptr) {
     _td_trf->detach();
-    _cv_cleanup = cv;
-    _timeout = tmo;
-    _running = true;
   }
 }
 
@@ -84,16 +67,19 @@ bool Client::done()
 
 void Client::cleanup()
 {
-  stop();
+  if (_valid) {
+    stop();
 
-  if (_ssl != nullptr && _tls != nullptr) { _tls->close(_ssl); _ssl = nullptr; }
-  _host.close(_fd_cli);
-  _host.close();
-
-  log("Closing connection [%s:%u]", _ip_from.c_str(), _port_from);
-
-  if (_cv_cleanup != nullptr) {
-    _cv_cleanup->notify_one();
+    if (_ssl != nullptr && _tls != nullptr) { _tls->close(_ssl); _ssl = nullptr; }
+    
+    _host.close(_fd_cli);
+    _host.close();
+    
+    log("[%s:%u] closing connection", _ip_from.c_str(), _port_from);
+    
+    if (_cv_cleanup != nullptr) _cv_cleanup->notify_one();
+    
+    _valid = false;
   }
 }
 
@@ -133,26 +119,56 @@ bool Client::read_tls()
   return okay;
 }
 
-void Client::transfer_td(Client* self)
+void Client::client_td(Client* self, Server* srv, int fd, const string& ip_from, int port_from)
+{
+  if (self->init(srv, fd, ip_from, port_from)) {
+    self->transfer();
+  } else {
+    self->cleanup();
+  }
+}
+
+bool Client::init(Server* srv, int fd, const string& ip_from, int port_from)
+{
+  SSL* ssl = srv->_tls.ssl();
+
+  if (ssl != nullptr && _host.connect(srv->_soc.gethostip().c_str(), srv->_soc.getport()) != -1 && srv->_tls.fd(ssl, _host.socket()) > 0 && srv->_tls.connect(ssl) > 0 && srv->loc_accept(ssl)) {
+    _fd_cli = fd;
+    _tls = &srv->_tls;
+    _ssl = ssl;
+    _ip_from = ip_from;
+    _port_from = port_from;
+    _cv_cleanup = &srv->_cv_cleanup;
+    _timeout = srv->_timeout;
+    _running = true;
+    return true;
+  } else if (errno != 0) error("init()");
+
+  if (ssl != nullptr) srv->_tls.close(ssl);
+
+  return false;
+}
+
+void Client::transfer()
 {
   fd_set rfds, fds;
 
-  int fd = self->_host.socket();
+  int fd = _host.socket();
 
   FD_ZERO(&rfds);
   FD_SET(fd, &rfds);
-  FD_SET(self->_fd_cli, &rfds);
+  FD_SET(_fd_cli, &rfds);
 
-  struct timeval tmv = { .tv_sec = self->_timeout, .tv_usec = 0 };
+  struct timeval tmv = { .tv_sec = _timeout, .tv_usec = 0 };
 
-  while (self->_running) {
+  while (_running) {
     memcpy(&fds, &rfds, sizeof(fds));
 
-    if (select(MAX(fd, self->_fd_cli) + 1, &fds, nullptr, nullptr, &tmv) > 0) {
+    if (select(MAX(fd, _fd_cli) + 1, &fds, nullptr, nullptr, &tmv) > 0) {
       if (FD_ISSET(fd, &fds)) { // from _host
-        if (! self->read_tls()) break;
+        if (! read_tls()) break;
       } else { // from client
-        if (! self->read_cli()) break;
+        if (! read_cli()) break;
       }
     } else {
       if (errno == EINTR) continue;
@@ -160,7 +176,7 @@ void Client::transfer_td(Client* self)
     }
   }
 
-  self->cleanup();
+  cleanup();
 }
 
 /////////////////////////////////////////////////
@@ -482,19 +498,13 @@ void Server::socks5_initnmpwd(Conf& cfg)
 
 void Server::soc_new_connection(int fd, const char* ip, int port)
 {
-  SSL* ssl = _tls.ssl();
   SOCKS5* socks5 = new SOCKS5();
 
-  if (ssl != nullptr && _tls.fd(ssl, fd) > 0 && _tls.accept(ssl) > 0 && soc_accept(ssl) && socks5 != nullptr && socks5->init(&_tls, ssl, fd, ip, port)) {
-    socks5->nmpwd(&_nmpwd);
-    socks5->start(&_cv_cleanup, _timeout);
+  if (socks5 != nullptr) {
+    socks5->start(this, fd, ip, port);
     _lst_socks5.push_back(socks5);
-    log("New connection from [%s:%u]", ip, port);
-    return;
-  } else if (errno != 0) error("soc_new_connection");
-
-  if (socks5 != nullptr) delete socks5;
-  if (ssl != nullptr) _tls.close(ssl);
+    log("[%s:%u] new connection", ip, port);
+  } else error("soc_new_connection");
 }
 
 void Server::web_new_connection(int fd, const char* ip, int port)
@@ -525,57 +535,21 @@ void Server::web_new_connection(int fd, const char* ip, int port)
 
   _loc.close(fd);
 
-  log("New connection [%s:%u] to web service", ip, port);
+  log("[%s:%u] new connection to web service", ip, port);
 }
 
 void Server::loc_new_connection(int fd, const char* ip, int port)
 {
-  SSL* ssl = _tls.ssl();
   Client* cli = new Client();
 
-  if (ssl != nullptr && cli != nullptr && cli->init(_soc.gethostip(), _soc.getport(), fd, &_tls, ssl, ip, port) && loc_accept(ssl)) {
-    cli->start(&_cv_cleanup, _timeout);
+  if (cli != nullptr) {
+    cli->start(this, fd, ip, port);
     _lst_client.push_back(cli);
-    log("New connection from [%s:%u]", ip, port);
-    return;
-  } else if (errno != 0) error("loc_new_connection");
-
-  if (cli != nullptr) delete cli;
-  if (ssl != nullptr) _tls.close(ssl);
+    log("[%s:%u] new connection", ip, port);
+  } else error("loc_new_connection");
 }
 
 ////
-
-bool Server::soc_accept(SSL* ssl)
-{
-  char buf[MAX(BUFSIZ, 1024)];
-  size_t len;
-
-  if ((len = _tls.read(ssl, buf, sizeof(buf))) <= 0) return false;
-
-  if (len >= sizeof(buf)) log("Request is too long");
-
-  string cmd, path;
-
-  if (web_hdrinfo(buf, len, cmd, path)) {
-    string ssr;
-    if (_serial.c_str()[0] == '/')
-      ssr = _serial;
-    else {
-      ssr = "/"; ssr += _serial;
-    }
-    if (cmd == "GET" && path == ssr) {
-      _tls.write(ssl, (void*) _200_ctx.data(), _200_ctx.size());
-      return true;
-    } else if (cmd == "GET" && path == "/") {
-      _tls.write(ssl, (void*) _200_ctx.data(), _200_ctx.size());
-    } else {
-      _tls.write(ssl, (void*) _404_ctx.data(), _404_ctx.size());
-    }
-  }
-  
-  return false;
-}
 
 bool Server::loc_accept(SSL* ssl)
 {
@@ -606,6 +580,37 @@ bool Server::loc_accept(SSL* ssl)
 
   if (! str.compare(9, 3, "200")) return true;
 
+  return false;
+}
+
+bool Server::soc_accept(SSL* ssl)
+{
+  char buf[MAX(BUFSIZ, 1024)];
+  size_t len;
+
+  if ((len = _tls.read(ssl, buf, sizeof(buf))) <= 0) return false;
+
+  if (len >= sizeof(buf)) log("Request is too long");
+
+  string cmd, path;
+
+  if (web_hdrinfo(buf, len, cmd, path)) {
+    string ssr;
+    if (_serial.c_str()[0] == '/')
+      ssr = _serial;
+    else {
+      ssr = "/"; ssr += _serial;
+    }
+    if (cmd == "GET" && path == ssr) {
+      _tls.write(ssl, (void*) _200_ctx.data(), _200_ctx.size());
+      return true;
+    } else if (cmd == "GET" && path == "/") {
+      _tls.write(ssl, (void*) _200_ctx.data(), _200_ctx.size());
+    } else {
+      _tls.write(ssl, (void*) _404_ctx.data(), _404_ctx.size());
+    }
+  }
+  
   return false;
 }
 

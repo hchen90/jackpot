@@ -55,17 +55,18 @@
 #define STATUS_IPV4_LENGTH 10
 #define STATUS_IPV6_LENGTH 22
 
+class Server;
+
 class SOCKS5 {
 public:
   SOCKS5();
   ~SOCKS5();
 
-  bool init(TLS* tls, SSL* ssl, int fd, const std::string& ip_from, int port_from);
-  void start(std::condition_variable* cv, time_t tmo);
+  //bool init(TLS* tls, SSL* ssl, int fd, const std::string& ip_from, int port_from);
+  //void start(std::condition_variable* cv, time_t tmo);
+  void start(Server* srv, int fd, const std::string& ip_from, int port_from);
   void stop();
   bool done();
-
-  void nmpwd(std::map<std::string, std::string>* nmpwd);
 private:
   void cleanup();
   void timeout();
@@ -80,10 +81,13 @@ private:
   short stage_bind();
   short stage_udpp();
 
-  static void socks5_td(SOCKS5* self);
+  bool init(Server* srv, int fd, const std::string& ip_from, int port_from);
+  void transfer();
+
+  static void socks5_td(SOCKS5* self, Server* srv, int fd, const std::string& ip_from, int port_from);
 
   int _fd_tls, _port_from;
-  bool _done, _running;
+  bool _done, _valid, _running;
   short _stage;
   time_t _timeout;
 

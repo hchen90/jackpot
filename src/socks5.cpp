@@ -20,6 +20,7 @@
 
 #include "config.h"
 #include "socks5.h"
+#include "server.h"
 #include "utils.h"
 
 #define DEF_TIMEOUT 20
@@ -27,31 +28,14 @@
 using namespace std;
 using namespace utils;
 
-SOCKS5::SOCKS5() : _fd_tls(-1), _port_from(0), _done(false), _running(false), _stage(STAGE_INIT), _timeout(DEF_TIMEOUT), _nmpwd(nullptr), _tls(nullptr), _ssl(nullptr), _td_socks5(nullptr), _cv_cleanup(nullptr) {}
+SOCKS5::SOCKS5() : _fd_tls(-1), _port_from(0), _done(false), _valid(true), _running(false), _stage(STAGE_INIT), _timeout(DEF_TIMEOUT), _nmpwd(nullptr), _tls(nullptr), _ssl(nullptr), _td_socks5(nullptr), _cv_cleanup(nullptr) {}
 
 SOCKS5::~SOCKS5() { cleanup(); }
 
-bool SOCKS5::init(TLS* tls, SSL* ssl, int fd, const string& ip_from, int port_from)
+void SOCKS5::start(Server* srv, int fd, const string& ip_from, int port_from)
 {
-  _tls = tls;
-  _ssl = ssl;
-  _fd_tls = fd;
-  _ip_from = ip_from;
-  _port_from = port_from;
-
-  if (_tls != nullptr && _ssl != nullptr && _fd_tls != -1)
-    return true;
-  else
-    return false;
-}
-
-void SOCKS5::start(condition_variable* cv, time_t tmo)
-{
-  if ((_td_socks5 = new thread(socks5_td, this)) != nullptr) {
+  if (! _running && (_td_socks5 = new thread(socks5_td, this, srv, fd, ip_from, port_from)) != nullptr) {
     _td_socks5->detach();
-    _cv_cleanup = cv;
-    _timeout = tmo;
-    _running = true;
   }
 }
 
@@ -69,16 +53,20 @@ void SOCKS5::stop()
 
 void SOCKS5::cleanup()
 {
-  stop();
+  if (_valid) {
+    stop();
 
-  if (_ssl != nullptr && _tls != nullptr) { _tls->close(_ssl); _ssl = nullptr; }
-  _target.close(_fd_tls);
-  _target.close();
+    if (_ssl != nullptr && _tls != nullptr) { _tls->close(_ssl); _ssl = nullptr; }
+    _target.close(_fd_tls);
+    _target.close();
 
-  log("Closing connection [%s:%u]", _ip_from.c_str(), _port_from);
+    log("[%s:%u] closing connection", _ip_from.c_str(), _port_from);
 
-  if (_cv_cleanup != nullptr) {
-    _cv_cleanup->notify_one();
+    if (_cv_cleanup != nullptr) {
+      _cv_cleanup->notify_one();
+    }
+
+    _valid = false;
   }
 }
 
@@ -331,30 +319,63 @@ short SOCKS5::stage_udpp()
 
 ////
 
-void SOCKS5::socks5_td(SOCKS5* self)
+void SOCKS5::socks5_td(SOCKS5* self, Server* srv, int fd, const string& ip_from, int port_from)
+{
+  if (self->init(srv, fd, ip_from, port_from)) {
+    self->transfer();
+  } else {
+    self->cleanup();
+  }
+}
+
+bool SOCKS5::init(Server* srv, int fd, const string& ip_from, int port_from)
+{
+  SSL* ssl = srv->_tls.ssl();
+
+  if (ssl != nullptr && srv->_tls.fd(ssl, fd) > 0 && srv->_tls.accept(ssl) > 0 && srv->soc_accept(ssl)) {
+    _tls = &srv->_tls;
+    _ssl = ssl;
+    _fd_tls = fd;
+    _ip_from = ip_from;
+    _port_from = port_from;
+    _cv_cleanup = &srv->_cv_cleanup;
+    _timeout = srv->_timeout;
+    if (! srv->_nmpwd.empty()) {
+      _nmpwd = &srv->_nmpwd;
+    }
+    _running = true;
+    return true;
+  } else if (errno != 0) error("init()");
+
+  if (ssl != nullptr) srv->_tls.close(ssl);
+
+  return false;
+}
+
+void SOCKS5::transfer()
 {
   char buf[MAX(BUFSIZ, 1024)];
   ssize_t len;
 
-  while ((len = self->_tls->read(self->_ssl, buf, sizeof(buf))) > 0) {
-    switch (self->_stage) {
-      case STAGE_INIT: self->_stage = self->stage_init(buf, len); break;
-      case STAGE_AUTH: self->_stage = self->stage_auth(buf, len); break;
-      case STAGE_REQU: self->_stage = self->stage_requ(buf, len); break;
+  while ((len = _tls->read(_ssl, buf, sizeof(buf))) > 0) {
+    switch (_stage) {
+      case STAGE_INIT: _stage = stage_init(buf, len); break;
+      case STAGE_AUTH: _stage = stage_auth(buf, len); break;
+      case STAGE_REQU: _stage = stage_requ(buf, len); break;
     }
-    if (self->_stage == STAGE_CONN) {
-      self->_stage = self->stage_conn();
-    } else if (self->_stage == STAGE_BIND) {
-      self->_stage = self->stage_bind();
-    } else if (self->_stage == STAGE_UDPP) {
-      self->_stage = self->stage_udpp();
+    if (_stage == STAGE_CONN) {
+      _stage = stage_conn();
+    } else if (_stage == STAGE_BIND) {
+      _stage = stage_bind();
+    } else if (_stage == STAGE_UDPP) {
+      _stage = stage_udpp();
     }
-    if (self->_stage == STAGE_FINI) {
+    if (_stage == STAGE_FINI) {
       break;
     }
   }
 
-  self->cleanup();
+  cleanup();
 }
 
 ////
@@ -362,11 +383,6 @@ void SOCKS5::socks5_td(SOCKS5* self)
 bool SOCKS5::done()
 {
   return _done;
-}
-
-void SOCKS5::nmpwd(map<string, string>* nmpwd)
-{
-  _nmpwd = nmpwd;
 }
 
 /*end*/

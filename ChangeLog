@@ -1,6 +1,7 @@
 2020-01-28: Hsiang Chen <a.chenxiang.z@gmail.com>
 	* Version 1.3 released
 	* Replace timeout watcher with condition variable
+	* Optimized threads
 
 2020-01-27: Hsiang Chen <a.chenxiang.z@gmail.com>
 	* Add feature of multiple threads
