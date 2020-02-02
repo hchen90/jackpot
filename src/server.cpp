@@ -71,12 +71,9 @@ void Client::cleanup()
     stop();
 
     if (_ssl != nullptr && _tls != nullptr) { _tls->close(_ssl); _ssl = nullptr; }
-    
     _host.close(_fd_cli);
     _host.close();
-    
     log("[%s:%u] closing connection", _ip_from.c_str(), _port_from);
-    
     if (_cv_cleanup != nullptr) _cv_cleanup->notify_one();
     
     _valid = false;
@@ -670,22 +667,31 @@ void Server::cleanup_td(Server* self)
     unique_lock<mutex> lck(self->_mutex_cleanup);
     self->_cv_cleanup.wait(lck);
     if (self->_issrv) {
-      for (auto it = self->_lst_socks5.begin(); it != self->_lst_socks5.end(); ) {
-        if ((*it)->done()) {
+      auto it = self->_lst_socks5.begin();
+      while (it != self->_lst_socks5.end()) {
+        auto soc = *it;
+        if (soc->done()) {
           auto lt = it; lt++;
           self->_lst_socks5.erase(it);
           it = lt;
-        } else it++;
+        } else {
+          it++;
+        }
       }
     } else {
-      for (auto it = self->_lst_client.begin(); it != self->_lst_client.end(); ) {
-        if ((*it)->done()) {
+      auto it = self->_lst_client.begin();
+      while (it != self->_lst_client.end()) {
+        auto cli = *it;
+        if (cli->done()) {
           auto lt = it; lt++;
           self->_lst_client.erase(it);
           it = lt;
-        } else it++;
+        } else {
+          it++;
+        }
       }
     }
+    //log("thread: _lst_socks5.size():%u, _lst_client.size():%u", self->_lst_socks5.size(), self->_lst_client.size());
   }
 }
 

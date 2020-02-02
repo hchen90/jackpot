@@ -164,6 +164,7 @@ short SOCKS5::stage_auth(void* ptr, size_t len)
         rep[1] = SOCKS5_SUCCESS;
         ns = STAGE_REQU;
       } else {
+        rep[1] = SOCKS5_REP_REFUSED;
         log("Authentication failed");
       }
     }
@@ -189,7 +190,6 @@ short SOCKS5::stage_requ(void* ptr, size_t len)
     char rep[MAX(STATUS_IPV4_LENGTH, STATUS_IPV6_LENGTH) + 2] = {0};
 
     if (cmd == SOCKS5_CMD_CONNECT) {
-      bool okay = false;
       short rep_l = STATUS_IPV4_LENGTH;
 
       rep[0] = SOCKS5_VER;
@@ -210,10 +210,12 @@ short SOCKS5::stage_requ(void* ptr, size_t len)
         if (inet_ntop(AF_INET, &sin.sin_addr.s_addr, ips, sizeof(ips)) != nullptr) {
           log("[%s:%u] try to reach [%s:%u] (ip4)", _ip_from.c_str(), _port_from, ips, ntohs(sin.sin_port));
           if (_target.connect((struct sockaddr*) &sin, sin_l) != -1) {
+            rep[1] = SOCKS5_REP_SUCCESS;
             ips[INET_ADDRSTRLEN] = '\0';
             log("[%s:%u] connected to [%s:%u] (ip4)", _ip_from.c_str(), _port_from, ips, ntohs(sin.sin_port));
-            okay = true;    
+            ns = STAGE_CONN;
           } else {
+            rep[1] = SOCKS5_REP_HOSTUNREACH;
             log("[%s:%u] cannot connect to [%s:%u] (ip4)", _ip_from.c_str(), _port_from, ips, ntohs(sin.sin_port));
           }
         }
@@ -232,11 +234,13 @@ short SOCKS5::stage_requ(void* ptr, size_t len)
         if (inet_ntop(AF_INET6, &sin6.sin6_addr, ips, sizeof(ips)) != nullptr) {
           log("[%s]:(%u) try to reach [%s]:(%u) (ip6)", _ip_from.c_str(), _port_from, ips, ntohs(sin6.sin6_port));
           if (_target.connect((struct sockaddr*) &sin6, sin6_l) != -1) {
+            rep[1] = SOCKS5_REP_SUCCESS;
             ips[INET6_ADDRSTRLEN] = '\0';
             log("[%s]:(%u) connected to [%s]:(%u) (ip6)", _ip_from.c_str(), _port_from, ips, ntohs(sin6.sin6_port));
             rep_l = STATUS_IPV6_LENGTH;
-            okay = true;
+            ns = STAGE_CONN;
           } else {
+            rep[1] = SOCKS5_REP_HOSTUNREACH;
             log("[%s]:(%u) cannot connect to [%s]:(%u) (ip6)", _ip_from.c_str(), _port_from, ips, ntohs(sin6.sin6_port));
           }
         }
@@ -248,24 +252,17 @@ short SOCKS5::stage_requ(void* ptr, size_t len)
 
         log("[%s:%u] try to reach [%s:%u] (domain)", _ip_from.c_str(), _port_from, hostip.c_str(), port);
         if (_target.connect(hostip.c_str(), port) != -1) {
+          rep[1] = SOCKS5_REP_SUCCESS;
           log("[%s:%u] connected to [%s:%u] (domain)", _ip_from.c_str(), _port_from, hostip.c_str(), port);
-          okay = true;
+          ns = STAGE_CONN;
         } else {
+          rep[1] = SOCKS5_REP_HOSTUNREACH;
           log("[%s:%u] cannot connect to [%s:%u] (domain)", _ip_from.c_str(), _port_from, hostip.c_str(), port);
         }
       }
 
-      if (okay) {
-        rep[1] = SOCKS5_REP_SUCCESS;
-        ns = STAGE_CONN;
-        _tls->write(_ssl, rep, rep_l);
-      }
+      _tls->write(_ssl, rep, rep_l);
     }
-  }
-
-  if (ns == STAGE_FINI) {
-    char rep[STATUS_IPV4_LENGTH] = { SOCKS5_VER, SOCKS5_REP_ERROR, 0, SOCKS5_ATYP_IPV4, 0 };
-    _tls->write(_ssl, rep, sizeof(rep));
   }
 
   return ns;

@@ -82,7 +82,36 @@ int Socks::bind(const struct sockaddr* addr, socklen_t addr_len, int tags, bool 
     if (tags & 0x20) setsockopt(SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
   }
 
-  return bd ? ::bind(socket_fd, addr, addr_len) : ::connect(socket_fd, addr, addr_len);
+  if (bd) return ::bind(socket_fd, addr, addr_len);
+
+  int fl = ::fcntl(socket_fd, F_GETFL, 0);
+  if (fl != -1 && fl & O_NONBLOCK) {
+    return ::connect(socket_fd, addr, addr_len);
+  }
+
+  bool okay = false;
+  setnonblock(true); // set socket to non-blocking
+  int ret = ::connect(socket_fd, addr, addr_len);
+
+  if (ret == -1) {
+    if (errno == EINPROGRESS) {
+      fd_set fds; FD_ZERO(&fds); FD_SET(socket_fd, &fds);
+      struct timeval tmv = { .tv_sec = 2, .tv_usec = 0 };
+      for (int i = 0; i < 4; i++) {
+        if ((ret = select(socket_fd + 1, nullptr, &fds, nullptr, &tmv)) < 0 && errno != EINTR) {
+          break;
+        } else if (ret > 0) {
+          int val; socklen_t len = sizeof(val);
+          getsockopt(socket_fd, SOL_SOCKET, SO_ERROR, &val, &len);
+          if (val == 0) okay = true;
+          break;
+        }
+      }
+    }
+  } else okay = true;
+
+  setnonblock(false); // set it back to blocking mode
+  return okay ? 0 : -1;
 }
 
 int Socks::bind(const char* hostip, int port, int tags, bool bd)
