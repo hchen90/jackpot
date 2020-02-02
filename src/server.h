@@ -21,6 +21,9 @@
 #define TMO_MAX 50
 #define TMO_MIN 5
 
+#define TMO_CLEANMAX (60 * 60 * 4)
+#define TMO_CLEANLONG (60 * 30)
+
 class Server;
 
 class Client {
@@ -85,6 +88,7 @@ private:
   void loc_accept_cb(ev::io& w, int revents);
   void signal_cb(ev::sig& w, int revents);
   void segment_cb(ev::sig& w, int revents);
+  void cleanup_cb(ev::timer& w, int revents);
 
   void soc_new_connection(int fd, const char* ip, int port);
   void web_new_connection(int fd, const char* ip, int port);
