@@ -691,7 +691,7 @@ void Server::cleanup_td(Server* self)
         }
       }
     }
-    log("thread: _lst_socks5.size():%u, _lst_client.size():%u", self->_lst_socks5.size(), self->_lst_client.size());
+    //log("thread: _lst_socks5.size():%u, _lst_client.size():%u", self->_lst_socks5.size(), self->_lst_client.size());
   }
 }
 
