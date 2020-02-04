@@ -32,11 +32,11 @@ public:
   ~Client();
 
   void start(Server* srv, int fd, const std::string& ip_from, int port_from);
-  /*const std::string& hostip, int port, int fd, TLS* tls, --SSL* ssl--, const std::string& ip_from, int port_from, std::condition_variable* cv, time_t tmo, const std::string& serial*/
   void stop();
   bool done();
+
+  time_t time();
 private:
-  void cleanup();
   bool read_cli();
   bool read_tls();
 
@@ -52,8 +52,8 @@ private:
 
   int _fd_cli;
 
-  bool _done, _valid, _running;
-  time_t _timeout;
+  bool _done, _running;
+  time_t _timeout, _latest;
 
   std::string _ip_from;
   int _port_from;
@@ -87,8 +87,6 @@ private:
   void web_accept_cb(ev::io& w, int revents);
   void loc_accept_cb(ev::io& w, int revents);
   void signal_cb(ev::sig& w, int revents);
-  void segment_cb(ev::sig& w, int revents);
-  void cleanup_cb(ev::timer& w, int revents);
 
   void soc_new_connection(int fd, const char* ip, int port);
   void web_new_connection(int fd, const char* ip, int port);
@@ -124,7 +122,6 @@ private:
   ev::io* _w_soc;
   ev::io* _w_loc;
   ev::sig* _w_sig;
-  ev::sig* _w_seg;
 
   std::condition_variable _cv_cleanup;
   std::mutex _mutex_cleanup;

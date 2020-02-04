@@ -62,13 +62,12 @@ public:
   SOCKS5();
   ~SOCKS5();
 
-  //bool init(TLS* tls, SSL* ssl, int fd, const std::string& ip_from, int port_from);
-  //void start(std::condition_variable* cv, time_t tmo);
   void start(Server* srv, int fd, const std::string& ip_from, int port_from);
   void stop();
   bool done();
+
+  time_t time();
 private:
-  void cleanup();
   void timeout();
   bool read_tls();
   bool read_tgt();
@@ -87,9 +86,9 @@ private:
   static void socks5_td(SOCKS5* self, Server* srv, int fd, const std::string& ip_from, int port_from);
 
   int _fd_tls, _port_from;
-  bool _done, _valid, _running;
+  bool _done, _running;
   short _stage;
-  time_t _timeout;
+  time_t _timeout, _latest;
 
   std::string _ip_from;
   std::map<std::string, std::string>* _nmpwd;

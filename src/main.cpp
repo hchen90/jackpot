@@ -21,6 +21,9 @@
 #include <string>
 #include <unistd.h>
 
+#include <execinfo.h>
+#include <signal.h>
+
 #include "config.h"
 #include "conf.h"
 #include "server.h"
@@ -32,6 +35,14 @@ using namespace std;
 using namespace utils;
 
 Server server;
+
+void sigsegt(int sig)
+{
+  void* arr[32];
+  size_t siz = backtrace(arr, 32);
+  backtrace_symbols_fd(arr, siz, STDERR_FILENO);
+  exit(EXIT_FAILURE);
+}
 
 void usage(void)
 {
@@ -125,6 +136,7 @@ int main(int argc, char* argv[])
   }
 
   signal(SIGPIPE, SIG_IGN);
+  signal(SIGSEGV, sigsegt);
 
   Conf cfg;
 

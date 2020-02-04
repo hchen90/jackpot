@@ -37,9 +37,16 @@ using namespace utils;
 
 /////////////////////////////////////////////////
 
-Client::Client() : _tls(nullptr), _ssl(nullptr), _fd_cli(-1), _done(false), _valid(true), _running(false), _timeout(DEF_TIMEOUT), _port_from(0), _td_trf(nullptr), _cv_cleanup(nullptr) {}
+Client::Client() : _tls(nullptr), _ssl(nullptr), _fd_cli(-1), _done(false), _running(false), _timeout(DEF_TIMEOUT), _latest(0), _port_from(0), _td_trf(nullptr), _cv_cleanup(nullptr) {}
 
-Client::~Client() { cleanup(); }
+Client::~Client()
+{ 
+  stop();
+  if (_ssl != nullptr && _tls != nullptr) { _tls->close(_ssl); _ssl = nullptr; }
+  _host.close(_fd_cli);
+  _host.close();
+  log("[%s:%u] closing connection", _ip_from.c_str(), _port_from);
+}
 
 void Client::start(Server* srv, int fd, const string& ip_from, int port_from)
 {
@@ -57,6 +64,9 @@ void Client::stop()
     }
     _done = true;
     _running = false;
+    if (_cv_cleanup) {
+      _cv_cleanup->notify_one();
+    }
   }
 }
 
@@ -65,19 +75,9 @@ bool Client::done()
   return _done;
 }
 
-void Client::cleanup()
+time_t Client::time()
 {
-  if (_valid) {
-    stop();
-
-    if (_ssl != nullptr && _tls != nullptr) { _tls->close(_ssl); _ssl = nullptr; }
-    _host.close(_fd_cli);
-    _host.close();
-    log("[%s:%u] closing connection", _ip_from.c_str(), _port_from);
-    if (_cv_cleanup != nullptr) _cv_cleanup->notify_one();
-    
-    _valid = false;
-  }
+  return _latest;
 }
 
 bool Client::read_cli()
@@ -121,7 +121,7 @@ void Client::client_td(Client* self, Server* srv, int fd, const string& ip_from,
   if (self->init(srv, fd, ip_from, port_from)) {
     self->transfer();
   } else {
-    self->cleanup();
+    self->stop();
   }
 }
 
@@ -162,6 +162,7 @@ void Client::transfer()
     memcpy(&fds, &rfds, sizeof(fds));
 
     if (select(MAX(fd, _fd_cli) + 1, &fds, nullptr, nullptr, &tmv) > 0) {
+      _latest = ::time(nullptr);
       if (FD_ISSET(fd, &fds)) { // from _host
         if (! read_tls()) break;
       } else { // from client
@@ -173,7 +174,7 @@ void Client::transfer()
     }
   }
 
-  cleanup();
+  stop();
 }
 
 /////////////////////////////////////////////////
@@ -187,7 +188,6 @@ Server::Server() :
   _w_soc(nullptr),
   _w_loc(nullptr),
   _w_sig(nullptr),
-  _w_seg(nullptr),
   _td_cleanup(nullptr) {}
 
 Server::~Server()
@@ -350,11 +350,6 @@ void Server::start_server()
       _w_sig->set<Server, &Server::signal_cb>(this);
       _w_sig->start();
     }
-    if ((_w_seg = new ev::sig()) != nullptr) {
-      _w_seg->set(SIGSEGV);
-      _w_seg->set<Server, &Server::segment_cb>(this);
-      _w_seg->start();
-    }
     _td_cleanup = new thread(cleanup_td, this);
     log("Proxy server is listening on [%s:%u]", _soc.gethostip().c_str(), _soc.getport());
     log("Web server is listening on [%s:%u]", _loc.gethostip().c_str(), _loc.getport());
@@ -366,7 +361,6 @@ void Server::stop_client()
 {
   if (_w_loc != nullptr) { delete _w_loc; _w_loc = nullptr; }
   if (_w_sig != nullptr) { delete _w_sig; _w_sig = nullptr; }
-  if (_w_seg != nullptr) { delete _w_seg; _w_seg = nullptr; }
   if (_loop  != nullptr) { delete _loop;  _loop  = nullptr; }
   if (_loc_addrinfo != nullptr) { _soc.resolve(nullptr, 0, &_loc_addrinfo); _loc_addrinfo = nullptr; }
   _running = false;
@@ -386,7 +380,6 @@ void Server::stop_server()
   if (_w_soc != nullptr) { delete _w_soc; _w_soc = nullptr; }
   if (_w_loc != nullptr) { delete _w_loc; _w_loc = nullptr; }
   if (_w_sig != nullptr) { delete _w_sig; _w_sig = nullptr; }
-  if (_w_seg != nullptr) { delete _w_seg; _w_seg = nullptr; }
   if (_loop  != nullptr) { delete _loop;  _loop  = nullptr; }
   _running = false;
   if (_td_cleanup != nullptr) {
@@ -496,7 +489,6 @@ void Server::socks5_initnmpwd(Conf& cfg)
 void Server::soc_new_connection(int fd, const char* ip, int port)
 {
   SOCKS5* socks5 = new SOCKS5();
-
   if (socks5 != nullptr) {
     socks5->start(this, fd, ip, port);
     _lst_socks5.push_back(socks5);
@@ -643,15 +635,6 @@ void Server::loc_accept_cb(ev::io& w, int revents)
   } else error("loc_accept");
 }
 
-void Server::segment_cb(ev::sig& w, int revents)
-{
-  void* array[16];
-  size_t size = backtrace(array, 16);
-  backtrace_symbols_fd(array, size, STDERR_FILENO);
-  log("Quitting...");
-  exit(EXIT_FAILURE);
-}
-
 void Server::signal_cb(ev::sig& w, int revents)
 {
   stop();
@@ -667,29 +650,19 @@ void Server::cleanup_td(Server* self)
     unique_lock<mutex> lck(self->_mutex_cleanup);
     self->_cv_cleanup.wait(lck);
     if (self->_issrv) {
-      auto it = self->_lst_socks5.begin();
-      while (it != self->_lst_socks5.end()) {
-        auto soc = *it;
-        if (soc->done()) {
-          auto lt = it; lt++;
-          self->_lst_socks5.erase(it);
-          it = lt;
-        } else {
-          it++;
-        }
-      }
+      self->_lst_socks5.remove_if([](SOCKS5*& socks5) {
+        if (socks5->done()) {
+          delete socks5;
+          return true;
+        } else return false;
+      });
     } else {
-      auto it = self->_lst_client.begin();
-      while (it != self->_lst_client.end()) {
-        auto cli = *it;
+      self->_lst_client.remove_if([](Client*& cli) {
         if (cli->done()) {
-          auto lt = it; lt++;
-          self->_lst_client.erase(it);
-          it = lt;
-        } else {
-          it++;
-        }
-      }
+          delete cli;
+          return true;
+        } else return false;
+      });
     }
     //log("thread: _lst_socks5.size():%u, _lst_client.size():%u", self->_lst_socks5.size(), self->_lst_client.size());
   }

@@ -28,10 +28,15 @@
 using namespace std;
 using namespace utils;
 
-SOCKS5::SOCKS5() : _fd_tls(-1), _port_from(0), _done(false), _valid(true), _running(false), _stage(STAGE_INIT), _timeout(DEF_TIMEOUT), _nmpwd(nullptr), _tls(nullptr), _ssl(nullptr), _td_socks5(nullptr), _cv_cleanup(nullptr) {}
+SOCKS5::SOCKS5() : _fd_tls(-1), _port_from(0), _done(false), _running(false), _stage(STAGE_INIT), _timeout(DEF_TIMEOUT), _latest(0), _nmpwd(nullptr), _tls(nullptr), _ssl(nullptr), _td_socks5(nullptr), _cv_cleanup(nullptr) {}
 
-SOCKS5::~SOCKS5() { cleanup(); }
-
+SOCKS5::~SOCKS5() { 
+  stop();
+  if (_ssl != nullptr && _tls != nullptr) { _tls->close(_ssl); _ssl = nullptr; }
+  _target.close(_fd_tls);
+  _target.close();
+  log("[%s:%u] closing connection", _ip_from.c_str(), _port_from);
+}
 void SOCKS5::start(Server* srv, int fd, const string& ip_from, int port_from)
 {
   if (! _running && (_td_socks5 = new thread(socks5_td, this, srv, fd, ip_from, port_from)) != nullptr) {
@@ -47,27 +52,20 @@ void SOCKS5::stop()
       _td_socks5 = nullptr;
     }
     _done = true;
-    _running =false;
+    _running = false;
+    if (_cv_cleanup != nullptr)
+      _cv_cleanup->notify_one();
   }
 }
 
-void SOCKS5::cleanup()
+bool SOCKS5::done()
 {
-  if (_valid) {
-    stop();
+  return _done;
+}
 
-    if (_ssl != nullptr && _tls != nullptr) { _tls->close(_ssl); _ssl = nullptr; }
-    _target.close(_fd_tls);
-    _target.close();
-
-    log("[%s:%u] closing connection", _ip_from.c_str(), _port_from);
-
-    if (_cv_cleanup != nullptr) {
-      _cv_cleanup->notify_one();
-    }
-
-    _valid = false;
-  }
+time_t SOCKS5::time()
+{
+  return _latest;
 }
 
 void SOCKS5::timeout()
@@ -291,6 +289,7 @@ short SOCKS5::stage_conn()
     }
 
     if (! endloop) {
+      _latest = ::time(nullptr);
       if (FD_ISSET(fd_tgt, &fds)) {
         if (! read_tgt()) endloop = true;
       } else {
@@ -321,7 +320,7 @@ void SOCKS5::socks5_td(SOCKS5* self, Server* srv, int fd, const string& ip_from,
   if (self->init(srv, fd, ip_from, port_from)) {
     self->transfer();
   } else {
-    self->cleanup();
+    self->stop();
   }
 }
 
@@ -370,16 +369,10 @@ void SOCKS5::transfer()
     if (_stage == STAGE_FINI) {
       break;
     }
+    _latest = ::time(nullptr);
   }
 
-  cleanup();
-}
-
-////
-
-bool SOCKS5::done()
-{
-  return _done;
+  stop();
 }
 
 /*end*/
