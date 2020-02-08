@@ -16,8 +16,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  * ***/
-#include <cstring>
-
 #include "config.h"
 #include "socks5.h"
 #include "server.h"
@@ -30,7 +28,8 @@ using namespace utils;
 
 SOCKS5::SOCKS5() : _fd_tls(-1), _port_from(0), _done(false), _running(false), _stage(STAGE_INIT), _timeout(DEF_TIMEOUT), _latest(0), _nmpwd(nullptr), _tls(nullptr), _ssl(nullptr), _td_socks5(nullptr), _cv_cleanup(nullptr) {}
 
-SOCKS5::~SOCKS5() { 
+SOCKS5::~SOCKS5()
+{ 
   stop();
   if (_ssl != nullptr && _tls != nullptr) { _tls->close(_ssl); _ssl = nullptr; }
   _target.close(_fd_tls);
@@ -47,14 +46,15 @@ void SOCKS5::start(Server* srv, int fd, const string& ip_from, int port_from)
 void SOCKS5::stop()
 {
   if (_running) {
+    _done = true;
+    _running = false;
+    if (_cv_cleanup != nullptr) {
+      _cv_cleanup->notify_one();
+    }
     if (_td_socks5 != nullptr) {
       delete _td_socks5;
       _td_socks5 = nullptr;
     }
-    _done = true;
-    _running = false;
-    if (_cv_cleanup != nullptr)
-      _cv_cleanup->notify_one();
   }
 }
 
@@ -326,25 +326,45 @@ void SOCKS5::socks5_td(SOCKS5* self, Server* srv, int fd, const string& ip_from,
 
 bool SOCKS5::init(Server* srv, int fd, const string& ip_from, int port_from)
 {
+  _running = true;
+
   SSL* ssl = srv->_tls.ssl();
 
-  if (ssl != nullptr && srv->_tls.fd(ssl, fd) > 0 && srv->_tls.accept(ssl) > 0 && srv->soc_accept(ssl)) {
-    _tls = &srv->_tls;
-    _ssl = ssl;
-    _fd_tls = fd;
-    _ip_from = ip_from;
-    _port_from = port_from;
-    _cv_cleanup = &srv->_cv_cleanup;
-    _timeout = srv->_timeout;
-    if (! srv->_nmpwd.empty()) {
-      _nmpwd = &srv->_nmpwd;
+  if (ssl != nullptr && srv->_tls.fd(ssl, fd) > 0 && srv->_tls.accept(ssl) > 0) {
+    fd_set fds;
+
+    FD_ZERO(&fds);
+    FD_SET(fd, &fds);
+
+    struct timeval tmv = { .tv_sec = srv->_timeout, .tv_usec = 0 };
+
+    switch (select(fd + 1, &fds, nullptr, nullptr, &tmv)) {
+      case -1:
+      case 0:
+        _cv_cleanup = &srv->_cv_cleanup;
+        _ip_from = ip_from;
+        _port_from = port_from;
+        break;
+      default:
+        if (srv->soc_accept(ssl)) {
+          _tls = &srv->_tls;
+          _ssl = ssl;
+          _fd_tls = fd;
+          _ip_from = ip_from;
+          _port_from = port_from;
+          _cv_cleanup = &srv->_cv_cleanup;
+          _timeout = srv->_timeout;
+          if (! srv->_nmpwd.empty()) {
+            _nmpwd = &srv->_nmpwd;
+          }
+          return true;
+        }
+        break;
     }
-    _running = true;
-    return true;
-  } else if (errno != 0) error("init()");
+  }
 
+  if (errno != 0 && errno != EINPROGRESS) error("init()");
   if (ssl != nullptr) srv->_tls.close(ssl);
-
   return false;
 }
 

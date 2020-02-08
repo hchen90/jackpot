@@ -74,7 +74,7 @@ public:
 private:
   bool pidfile(const std::string& pidfl);
 
-  bool web_hdrinfo(const void* ptr, size_t len, std::string& cmd, std::string& path);
+  bool web_hdrinfo(const void* ptr, size_t len, std::string& cmd, std::string& path, std::string& ver);
   bool web_initpage(const std::string& page);
   void socks5_initnmpwd(Conf& cfg);
 
@@ -100,7 +100,7 @@ private:
   ///////////////////////////////////////////////
   
   bool _running, _issrv;
-  float _timeout;
+  time_t _timeout;
 
   TLS _tls;
 

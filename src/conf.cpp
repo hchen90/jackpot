@@ -17,7 +17,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  * ***/
 #include <fstream>
-#include <cstring>
+#include <regex>
 
 #include "config.h"
 #include "conf.h"
@@ -45,43 +45,27 @@ bool Conf::open(const string& file)
 
   if (fin.good()) {
     string line, session = ANONYMOUS_KEY;
+    smatch sm;
+    regex re_bla("[\t ]+*");
+    regex re_cmt("[\t ]+*;.*");
+    regex re_sec("\\[([A-Za-z_0-9]+)\\]");
+    regex re_par("[\t ]+*([A-Za-z_0-9]+)[\t ]+*=[\t ]+*([^\t ]+)");
 
     while (true) {
       if (getline(fin, line)) {
-        size_t l = line.size();
-        const char* s = line.c_str();
-        const char* e = s + l;
-
-        if (*s == ';') continue; // skip comment
-        if (l > 2 && *s == '[' && *(e - 1) == ']') { // session
-          session = string(s + 1, l - 2);
-        } else {
+        if (regex_match(line, re_bla)) continue; // skip blank line
+        if (regex_match(line, re_cmt)) continue; // skip comment
+        if (regex_search(line, sm, re_sec) && sm.size() == 2) { // search section
+          session = sm[1];
+        } else if (regex_search(line, sm, re_par) && sm.size() == 3) { // search kay = value pair
           if (_settings.find(session) == _settings.end()) {
             _settings.insert(make_pair(session, new map<string, string>()));
           }
-
-          while (s < e && (*s == ' ' || *s == '\t') && *s != '\0') s++;
-          if (*s != '\0') {
-            const char* c = strchr(s, '=');
-            if (*c == '=' && c + 1 < e) {
-              const char* d = s;
-              while (d < c && *d != ' ' && *d != '\t') d++;
-              string key = string(s, d - s);
-              const char* f = c + 1;
-              while (f < e && (*f == ' ' || *s == '\t') && *f != '\0') f++;
-              const char* g = strchr(f, ' ');
-              if (g != nullptr) e = g;
-              const char* h = strchr(f, '\t');
-              if (h != nullptr) e = h;
-              string value = string(f, e - f);
-
-              auto lt = _settings.find(session);
-              if (lt != _settings.end() && lt->second != nullptr) {
-                lt->second->insert(make_pair(key, value));
-              }
-            }
+          auto lt = _settings.find(session);
+          if (lt != _settings.end() && lt->second != nullptr) {
+            lt->second->insert(make_pair(sm[1], sm[2]));
           }
-        }
+        } else break;
         okay = true;
       } else break;
     }

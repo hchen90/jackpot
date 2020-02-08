@@ -16,8 +16,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  * ***/
-#include <cstring>
 #include <fstream>
+#include <regex>
 
 #include <unistd.h>
 #include <execinfo.h>
@@ -58,14 +58,14 @@ void Client::start(Server* srv, int fd, const string& ip_from, int port_from)
 void Client::stop()
 {
   if (_running) {
-    if (_td_trf != nullptr) {
-      delete _td_trf;
-      _td_trf = nullptr;
-    }
     _done = true;
     _running = false;
     if (_cv_cleanup) {
       _cv_cleanup->notify_one();
+    }
+    if (_td_trf != nullptr) {
+      delete _td_trf;
+      _td_trf = nullptr;
     }
   }
 }
@@ -127,22 +127,42 @@ void Client::client_td(Client* self, Server* srv, int fd, const string& ip_from,
 
 bool Client::init(Server* srv, int fd, const string& ip_from, int port_from)
 {
+  _running = true;
+
   SSL* ssl = srv->_tls.ssl();
 
-  if (ssl != nullptr && _host.connect(srv->_soc.gethostip().c_str(), srv->_soc.getport()) != -1 && srv->_tls.fd(ssl, _host.socket()) > 0 && srv->_tls.connect(ssl) > 0 && srv->loc_accept(ssl)) {
-    _fd_cli = fd;
-    _tls = &srv->_tls;
-    _ssl = ssl;
-    _ip_from = ip_from;
-    _port_from = port_from;
-    _cv_cleanup = &srv->_cv_cleanup;
-    _timeout = srv->_timeout;
-    _running = true;
-    return true;
-  } else if (errno != 0) error("init()");
+  if (ssl != nullptr && _host.connect(srv->_soc.gethostip().c_str(), srv->_soc.getport()) != -1 && srv->_tls.fd(ssl, _host.socket()) > 0 && srv->_tls.connect(ssl) > 0) {
+    fd_set fds;
 
+    FD_ZERO(&fds);
+    FD_SET(_host.socket(), &fds);
+
+    struct timeval tmv = { .tv_sec = srv->_timeout, .tv_usec = 0 };
+
+    switch (select(_host.socket() + 1, nullptr, &fds, nullptr, &tmv)) {
+      case -1:
+      case 0:
+        _cv_cleanup = &srv->_cv_cleanup;
+        _ip_from = ip_from;
+        _port_from = port_from;
+        break;
+      default:
+        if (srv->loc_accept(ssl)) {
+          _fd_cli = fd;
+          _tls = &srv->_tls;
+          _ssl = ssl;
+          _ip_from = ip_from;
+          _port_from = port_from;
+          _cv_cleanup = &srv->_cv_cleanup;
+          _timeout = srv->_timeout;
+          return true;
+        }
+        break;
+    }
+  }
+
+  if (errno != 0 && errno != EINPROGRESS) error("init()");
   if (ssl != nullptr) srv->_tls.close(ssl);
-
   return false;
 }
 
@@ -272,7 +292,7 @@ bool Server::server(Conf& cfg)
 
   if (port_tls_n <= 0) port_tls_n = 443;
   if (port_web_n <= 0) port_web_n = 80;
- 
+
   if (_soc.bind(ip_tls.c_str(), port_tls_n) != -1 && _soc.listen() != -1 && \
       _loc.bind(ip_web.c_str(), port_web_n) != -1 && _loc.listen() != -1) {
     if (! web_initpage(page)) {
@@ -396,28 +416,17 @@ void Server::stop_server()
 
 ////////////////////////////////////////////
 
-bool Server::web_hdrinfo(const void* ptr, size_t len, string& cmd, string& path)
+bool Server::web_hdrinfo(const void* ptr, size_t len, string& cmd, string& path, string& ver)
 {
-  const char* p = (const char*) ptr;
-  const char* r = strchr(p, ' ');
-  const char* e = p + len;
+  regex re("([A-Z]+)[\t ]+(/[A-Za-z_0-9]+)[\t ]+([A-Z]+/[0-9]+\\.[0-9]+)");
+  smatch sm;
+  string str((const char*) ptr, len);
 
-  if (*r == ' ') {
-    if (r - p > 0) {
-      cmd = string(p, r - p);
-    } else return false;
-  } else return false;
-
-  for ( ; *r == ' '; ) r++;
-
-  if (r < e && *r != ' ' && *r != '\0' && *r == '/') {
-    const char* q = strchr(r, ' ');
-    const char* m = strchr(r, '\r');
-    const char* n = strchr(r, '\n');
-    if (m + 1 >= n && q < m) {
-      path = string(r, q - r);
-      return true;
-    }
+  if (regex_search(str, sm, re)) {
+    cmd = sm[1];
+    path = sm[2];
+    ver = sm[3];
+    return true;
   }
 
   return false;
@@ -503,9 +512,9 @@ void Server::web_new_connection(int fd, const char* ip, int port)
 
   while ((len = _loc.recv(fd, buf, sizeof(buf))) > 0) {
     if (! done) {
-      string cmd, path;
+      string cmd, path, ver;
 
-      if (web_hdrinfo(buf, len, cmd, path) && cmd == "GET") {
+      if (web_hdrinfo(buf, len, cmd, path, ver) && cmd == "GET") {
         if (path == "/") {
           if (_loc.send(fd, _200_ctx.data(), _200_ctx.size()) > 0)
             okay = true;
@@ -581,9 +590,9 @@ bool Server::soc_accept(SSL* ssl)
 
   if (len >= sizeof(buf)) log("Request is too long");
 
-  string cmd, path;
+  string cmd, path, ver;
 
-  if (web_hdrinfo(buf, len, cmd, path)) {
+  if (web_hdrinfo(buf, len, cmd, path, ver)) {
     string ssr;
     if (_serial.c_str()[0] == '/')
       ssr = _serial;
@@ -664,7 +673,7 @@ void Server::cleanup_td(Server* self)
         } else return false;
       });
     }
-    //log("thread: _lst_socks5.size():%u, _lst_client.size():%u", self->_lst_socks5.size(), self->_lst_client.size());
+    log("thread [%x]: _lst_socks5.size():%u, _lst_client.size():%u", ::time(nullptr), self->_lst_socks5.size(), self->_lst_client.size());
   }
 }
 
