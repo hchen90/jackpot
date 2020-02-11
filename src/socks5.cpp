@@ -287,7 +287,7 @@ short SOCKS5::stage_conn()
       case 0:
         timeout();
         endloop = true;
-        log("[%s:%u] socks5 timeout elapsed (%u)", _timeout);
+        log("[%s:%u] socks5 timeout elapsed (%u)", _ip_from.c_str(), _port_from, _timeout);
         break;
       case -1:
         if (errno == EINTR) continue;
