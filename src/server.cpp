@@ -83,7 +83,7 @@ time_t Client::time()
 bool Client::read_cli()
 {
   bool okay = true;
-  char buf[BUFSIZ];
+  char buf[BUFSIZE];
   ssize_t len, sent = 0;
 
   if ((len = _host.recv(_fd_cli, buf, sizeof(buf))) > 0) {
@@ -101,7 +101,7 @@ bool Client::read_cli()
 bool Client::read_tls()
 {
   bool okay = true;
-  char buf[BUFSIZ];
+  char buf[BUFSIZE];
   ssize_t len, sent = 0;
 
   if ((len = _tls->read(_ssl, buf, sizeof(buf))) > 0) {
@@ -228,7 +228,7 @@ bool Server::client(Conf& cfg)
   string timeout;
 
   if (cfg.get("main", "timeout", timeout)) {
-    _timeout = MIN(TMO_MIN, MAX(TMO_MIN, atol(timeout.c_str())));
+    _timeout = atol(timeout.c_str());
   }
 
   string ip_tls, port_tls;
@@ -273,7 +273,7 @@ bool Server::server(Conf& cfg)
   string timeout;
 
   if (cfg.get("main", "timeout", timeout)) {
-    _timeout = MIN(TMO_MIN, MAX(TMO_MIN, atol(timeout.c_str())));
+    _timeout = atol(timeout.c_str());
   }
 
   string ip_tls, port_tls;
@@ -418,16 +418,18 @@ void Server::stop_server()
 
 bool Server::web_hdrinfo(const void* ptr, size_t len, string& cmd, string& path, string& ver)
 {
-  regex re("([A-Z]+)[\t ]+(/[A-Za-z_0-9]+)[\t ]+([A-Z]+/[0-9]+\\.[0-9]+)");
+  regex re("([A-Z]+)[\t ]+(/[A-Za-z_0-9]+*)[\t ]+([A-Z]+/[0-9]+\\.[0-9]+)");
   smatch sm;
-  string str((const char*) ptr, len);
+  string str((const char*) ptr, MIN(len, 64));
 
-  if (regex_search(str, sm, re)) {
+//log("web_hdrinfo {ptr:%p, len:%u} content:%s", ptr, len, str.c_str());
+  if (regex_search(str, sm, re) && sm.size() == 4) {
     cmd = sm[1];
     path = sm[2];
     ver = sm[3];
     return true;
   }
+//log("web_hdrinfo {ptr:%p, len:%u} content:%s - %s - %s", ptr, len, cmd.c_str(), path.c_str(), ver.c_str());
 
   return false;
 }
@@ -659,21 +661,21 @@ void Server::cleanup_td(Server* self)
     unique_lock<mutex> lck(self->_mutex_cleanup);
     self->_cv_cleanup.wait(lck);
     if (self->_issrv) {
-      self->_lst_socks5.remove_if([](SOCKS5*& socks5) {
-        if (socks5->done()) {
+      self->_lst_socks5.remove_if([self](SOCKS5*& socks5) {
+        if (socks5->done() || (socks5->time() - ::time(nullptr)) > self->_timeout * 2) {
           delete socks5;
           return true;
         } else return false;
       });
     } else {
-      self->_lst_client.remove_if([](Client*& cli) {
-        if (cli->done()) {
+      self->_lst_client.remove_if([self](Client*& cli) {
+        if (cli->done() || (cli->time() - ::time(nullptr)) > self->_timeout * 2) {
           delete cli;
           return true;
         } else return false;
       });
     }
-    log("thread [%x]: _lst_socks5.size():%u, _lst_client.size():%u", ::time(nullptr), self->_lst_socks5.size(), self->_lst_client.size());
+    //log("thread [%x]: _lst_socks5.size():%u, _lst_client.size():%u", ::time(nullptr), self->_lst_socks5.size(), self->_lst_client.size());
   }
 }
 

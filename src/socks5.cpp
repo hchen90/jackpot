@@ -79,7 +79,7 @@ void SOCKS5::timeout()
 bool SOCKS5::read_tls()
 {
   bool okay = true;
-  char buf[BUFSIZ];
+  char buf[BUFSIZE];
   ssize_t len, sent = 0;
 
   if ((len = _tls->read(_ssl, buf, sizeof(buf))) > 0) {
@@ -97,7 +97,7 @@ bool SOCKS5::read_tls()
 bool SOCKS5::read_tgt()
 {
   bool okay = true;
-  char buf[BUFSIZ];
+  char buf[BUFSIZE];
   ssize_t len, sent = 0;
 
   if ((len = _target.recv(buf, sizeof(buf))) > 0) {
@@ -230,16 +230,16 @@ short SOCKS5::stage_requ(void* ptr, size_t len)
         rep[3] = SOCKS5_ATYP_IPV6;
         
         if (inet_ntop(AF_INET6, &sin6.sin6_addr, ips, sizeof(ips)) != nullptr) {
-          log("[%s]:(%u) try to reach [%s]:(%u) (ip6)", _ip_from.c_str(), _port_from, ips, ntohs(sin6.sin6_port));
+          log("[%s]:%u try to reach [%s]:%u (ip6)", _ip_from.c_str(), _port_from, ips, ntohs(sin6.sin6_port));
           if (_target.connect((struct sockaddr*) &sin6, sin6_l) != -1) {
             rep[1] = SOCKS5_REP_SUCCESS;
             ips[INET6_ADDRSTRLEN] = '\0';
-            log("[%s]:(%u) connected to [%s]:(%u) (ip6)", _ip_from.c_str(), _port_from, ips, ntohs(sin6.sin6_port));
+            log("[%s]:%u connected to [%s]:%u (ip6)", _ip_from.c_str(), _port_from, ips, ntohs(sin6.sin6_port));
             rep_l = STATUS_IPV6_LENGTH;
             ns = STAGE_CONN;
           } else {
             rep[1] = SOCKS5_REP_HOSTUNREACH;
-            log("[%s]:(%u) cannot connect to [%s]:(%u) (ip6)", _ip_from.c_str(), _port_from, ips, ntohs(sin6.sin6_port));
+            log("[%s]:%u cannot connect to [%s]:%u (ip6)", _ip_from.c_str(), _port_from, ips, ntohs(sin6.sin6_port));
           }
         }
       } else if (aty == SOCKS5_ATYP_DOMAINNAME) {
@@ -284,8 +284,16 @@ short SOCKS5::stage_conn()
     memcpy(&fds, &rfds, sizeof(fds));
 
     switch (select(MAX(fd_tgt, _fd_tls) + 1, &fds, nullptr, nullptr, &tmv)) {
-      case 0: timeout(); endloop = true; break;
-      case -1: if (errno == EINTR) continue; else error("stage_conn"); endloop = true; break;
+      case 0:
+        timeout();
+        endloop = true;
+        log("[%s:%u] socks5 timeout elapsed (%u)", _timeout);
+        break;
+      case -1:
+        if (errno == EINTR) continue;
+        else error("stage_conn");
+        endloop = true;
+        break;
     }
 
     if (! endloop) {

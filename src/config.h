@@ -19,4 +19,6 @@
   #define MIN(s1,s2) (s1<s2?s1:s2)
 #endif
 
+#define BUFSIZE 256
+
 #endif	/* _CONFIG_H_ */

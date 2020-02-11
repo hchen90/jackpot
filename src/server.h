@@ -18,12 +18,6 @@
 #include "socks.h"
 #include "socks5.h"
 
-#define TMO_MAX 50
-#define TMO_MIN 5
-
-#define TMO_CLEANMAX (60 * 60 * 4)
-#define TMO_CLEANLONG (60 * 30)
-
 class Server;
 
 class Client {
