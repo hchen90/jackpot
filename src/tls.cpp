@@ -36,7 +36,7 @@ TLS::~TLS()
 
 bool TLS::init()
 {
-  if ((_ctx = SSL_CTX_new(TLS_client_method())) != nullptr) {
+  if ((_ctx = SSL_CTX_new(SSLv23_client_method())) != nullptr) {
     SSL_CTX_set_ecdh_auto(_ctx, 1);
     return true;
   }
@@ -45,7 +45,7 @@ bool TLS::init()
 
 bool TLS::init(const string& key, const string& cert)
 {
-  if ((_ctx = SSL_CTX_new(TLS_server_method())) != nullptr) {
+  if ((_ctx = SSL_CTX_new(SSLv23_server_method())) != nullptr) {
     SSL_CTX_set_ecdh_auto(_ctx, 1);
     // set key and cert
     if (SSL_CTX_use_PrivateKey_file(_ctx, key.c_str(), SSL_FILETYPE_PEM) <= 0) {
