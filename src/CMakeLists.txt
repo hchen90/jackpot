@@ -1,9 +1,5 @@
-cmake_minimum_required(VERSION 2.6)
+cmake_minimum_required(VERSION 3.4)
 project(jackpot)
-
-if(CMAKE_VERSION VERSION_LESS 3.4)
-  message(FATAL_ERROR "CMake version is too old, 3.4 or higher required")
-endif(CMAKE_VERSION VERSION_LESS 3.4)
 
 if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.8)
   message(FATAL_ERROR "GCC version is too old, 4.8 or higher required")
@@ -15,7 +11,7 @@ set(PACKAGE_URL "https://github.com/hchen90/jackpot.git")
 set(PACKAGE_BUGREPORT "a.chenxiang.z@gmail.com")
 configure_file(config.h.in config.h @ONLY)
 
-add_definitions("-std=c++0x -Wall -g -rdynamic")
+add_definitions("-std=c++11 -Wall -g -rdynamic")
 
 set(DEPLIBS "-pthread")
 
@@ -33,7 +29,6 @@ endfunction(check_library)
 check_library(ev FATAL_ERROR)
 check_library(ssl FATAL_ERROR)
 check_library(crypto FATAL_ERROR)
-check_library(pthread FATAL_ERROR)
 
 file(GLOB SRCFILES "*.cpp")
 file(GLOB HDRFILES "*.h")

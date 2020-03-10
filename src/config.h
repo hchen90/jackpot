@@ -20,5 +20,10 @@
 #endif
 
 #define BUFSIZE 256
+#define DEF_CTIMEOUT 20
+#define DEF_STIMEOUT 108000
+
+#undef USE_SSTREAM
+//#define USE_SSTREAM
 
 #endif	/* _CONFIG_H_ */

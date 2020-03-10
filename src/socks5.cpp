@@ -21,12 +21,10 @@
 #include "server.h"
 #include "utils.h"
 
-#define DEF_TIMEOUT 20
-
 using namespace std;
 using namespace utils;
 
-SOCKS5::SOCKS5() : _fd_tls(-1), _port_from(0), _done(false), _running(false), _stage(STAGE_INIT), _timeout(DEF_TIMEOUT), _latest(0), _nmpwd(nullptr), _tls(nullptr), _ssl(nullptr), _td_socks5(nullptr), _cv_cleanup(nullptr) {}
+SOCKS5::SOCKS5() : _fd_tls(-1), _port_from(0), _done(false), _running(false), _stage(STAGE_INIT), _timeout(DEF_CTIMEOUT), _latest(0), _nmpwd(nullptr), _tls(nullptr), _ssl(nullptr), _td_socks5(nullptr), _cv_cleanup(nullptr) {}
 
 SOCKS5::~SOCKS5()
 { 
@@ -230,16 +228,16 @@ short SOCKS5::stage_requ(void* ptr, size_t len)
         rep[3] = SOCKS5_ATYP_IPV6;
         
         if (inet_ntop(AF_INET6, &sin6.sin6_addr, ips, sizeof(ips)) != nullptr) {
-          log("[%s]:%u try to reach [%s]:%u (ip6)", _ip_from.c_str(), _port_from, ips, ntohs(sin6.sin6_port));
+          log("[%s:/%u] try to reach [%s:/%u] (ip6)", _ip_from.c_str(), _port_from, ips, ntohs(sin6.sin6_port));
           if (_target.connect((struct sockaddr*) &sin6, sin6_l) != -1) {
             rep[1] = SOCKS5_REP_SUCCESS;
             ips[INET6_ADDRSTRLEN] = '\0';
-            log("[%s]:%u connected to [%s]:%u (ip6)", _ip_from.c_str(), _port_from, ips, ntohs(sin6.sin6_port));
+            log("[%s:/%u] connected to [%s:/%u] (ip6)", _ip_from.c_str(), _port_from, ips, ntohs(sin6.sin6_port));
             rep_l = STATUS_IPV6_LENGTH;
             ns = STAGE_CONN;
           } else {
             rep[1] = SOCKS5_REP_HOSTUNREACH;
-            log("[%s]:%u cannot connect to [%s]:%u (ip6)", _ip_from.c_str(), _port_from, ips, ntohs(sin6.sin6_port));
+            log("[%s:/%u] cannot connect to [%s:/%u] (ip6)", _ip_from.c_str(), _port_from, ips, ntohs(sin6.sin6_port));
           }
         }
       } else if (aty == SOCKS5_ATYP_DOMAINNAME) {
@@ -336,7 +334,12 @@ bool SOCKS5::init(Server* srv, int fd, const string& ip_from, int port_from)
 {
   _running = true;
 
-  SSL* ssl = srv->_tls.ssl();
+  SSL* ssl = srv->_tls.ssl(ip_from, port_from);
+
+  _fd_tls = fd;
+  _ip_from = ip_from;
+  _port_from = port_from;
+  _cv_cleanup = &srv->_cv_cleanup;
 
   if (ssl != nullptr && srv->_tls.fd(ssl, fd) > 0 && srv->_tls.accept(ssl) > 0) {
     fd_set fds;
@@ -344,24 +347,17 @@ bool SOCKS5::init(Server* srv, int fd, const string& ip_from, int port_from)
     FD_ZERO(&fds);
     FD_SET(fd, &fds);
 
-    struct timeval tmv = { .tv_sec = srv->_timeout, .tv_usec = 0 };
+    struct timeval tmv = { .tv_sec = srv->_ctimeout, .tv_usec = 0 };
 
     switch (select(fd + 1, &fds, nullptr, nullptr, &tmv)) {
       case -1:
       case 0:
-        _cv_cleanup = &srv->_cv_cleanup;
-        _ip_from = ip_from;
-        _port_from = port_from;
         break;
       default:
         if (srv->soc_accept(ssl)) {
           _tls = &srv->_tls;
           _ssl = ssl;
-          _fd_tls = fd;
-          _ip_from = ip_from;
-          _port_from = port_from;
-          _cv_cleanup = &srv->_cv_cleanup;
-          _timeout = srv->_timeout;
+          _timeout = srv->_ctimeout;
           if (! srv->_nmpwd.empty()) {
             _nmpwd = &srv->_nmpwd;
           }
@@ -373,6 +369,9 @@ bool SOCKS5::init(Server* srv, int fd, const string& ip_from, int port_from)
 
   if (errno != 0 && errno != EINPROGRESS) error("init()");
   if (ssl != nullptr) srv->_tls.close(ssl);
+
+  stop();
+
   return false;
 }
 

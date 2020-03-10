@@ -20,8 +20,14 @@
 #include <cstring>
 #include <iostream>
 #include <mutex>
+#include <string>
+
+#ifdef USE_SSTREAM
+#include <sstream>
+#endif
 
 #include "utils.h"
+#include "config.h"
 
 static std::mutex _std_log_mutex, _std_err_mutex;
 
@@ -33,15 +39,53 @@ void utils::log(const std::string& fmt, ...)
   va_end(ap);
 }
 
+static bool _log_disp_timestamp = false;
+
 void utils::log(const std::string& fmt, va_list ap)
 {
   char buf[BUFSIZ];
 
   if (vsnprintf(buf, sizeof(buf), fmt.c_str(), ap) > 0) {
+#ifdef USE_SSTREAM
+    std::ostringstream oss;
+#else
+    std::string str;
+#endif
+    if (_log_disp_timestamp) {
+#ifdef USE_SSTREAM
+      oss << "[" << (uint32_t) time(nullptr) << "] " << buf;
+#else
+      str = "[";
+
+      char suf[16];
+
+      snprintf(suf, sizeof(suf), "%u", (uint32_t) time(nullptr));
+
+      str += suf;
+      str += "]";
+      str += buf;
+#endif
+    } else {
+#ifdef USE_SSTREAM
+      oss << buf;
+#else
+      str = buf;
+#endif
+    }
+
     _std_log_mutex.lock();
-    std::cout << "\r" << buf << std::endl;
+#ifdef USE_SSTREAM
+    std::cout << "\r" << oss.str() << std::endl;
+#else
+    std::cout << "\r" << str << std::endl;
+#endif
     _std_log_mutex.unlock();
   }
+}
+
+void utils::log_disp_timestamp(bool dts)
+{
+  _log_disp_timestamp = dts;
 }
 
 void utils::error(const std::string& fmt, ...)

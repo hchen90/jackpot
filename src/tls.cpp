@@ -17,6 +17,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  * ***/
 #include "tls.h"
+#include "utils.h"
 
 using namespace std;
 
@@ -63,10 +64,20 @@ bool TLS::init(const string& key, const string& cert)
 
 ///////////////////////////////
 
-SSL* TLS::ssl()
+SSL* TLS::ssl(const string& ip, int port)
 {
-  if (_ctx != nullptr)
-    return SSL_new(_ctx);
+  if (_ctx != nullptr) {
+    SSL* s = SSL_new(_ctx);
+    if (s != nullptr) {
+      SSLcli* sc = new SSLcli();
+      if (sc != nullptr) {
+        sc->port = port;
+        sc->ip = ip;
+        _sslcli.insert(make_pair(s, sc));
+      }
+    }
+    return s;
+  }
   return nullptr;
 }
 
@@ -74,7 +85,7 @@ int TLS::fd(SSL* ssl, int fd)
 {
   if (ssl != nullptr) {
     int ret = SSL_set_fd(ssl, fd);
-    if (ret <= 0) error();
+    if (ret <= 0) error(ssl);
     else return ret;
   }
   return -1;
@@ -84,7 +95,7 @@ int TLS::accept(SSL* ssl)
 {
   if (ssl != nullptr) {
     int ret = SSL_accept(ssl);
-    if (ret <= 0) error();
+    if (ret <= 0) error(ssl);
     else return ret;
   }
   return -1;
@@ -94,7 +105,7 @@ int TLS::connect(SSL* ssl)
 {
   if (ssl != nullptr) {
     int ret = SSL_connect(ssl);
-    if (ret <= 0) error();
+    if (ret <= 0) error(ssl);
     else return ret;
   }
   return -1;
@@ -124,13 +135,38 @@ int TLS::write(SSL* ssl, void* buf, int num)
 void TLS::close(SSL* ssl)
 {
   if (ssl != nullptr) {
+    auto sc = _sslcli.find(ssl);
+    if (sc != _sslcli.end()) {
+      delete sc->second;
+      _sslcli.erase(sc);
+    }
     SSL_shutdown(ssl);
     SSL_free(ssl);
   }
 }
 
-void TLS::error()
+void TLS::error(SSL* ssl)
 {
+  if (ssl != nullptr) {
+    auto sc = _sslcli.find(ssl);
+    if (sc != _sslcli.end()) {
+      string str = "[";
+
+      str += sc->second->ip + ":";
+
+      char buf[BUFSIZ];
+      snprintf(buf, sizeof(buf), "%u", sc->second->port);
+      
+      str += buf;
+      str += "]";
+
+      ERR_error_string_n(ERR_get_error(), buf, sizeof(buf));
+
+      utils::log("%s %s", str.c_str(), buf);
+      return;
+    }
+  }
+
   ERR_print_errors_fp(stderr);
 }
 

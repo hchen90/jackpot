@@ -11,7 +11,6 @@
 #include <sys/types.h>
 #include <arpa/inet.h>
 #include <netdb.h>
-#include <poll.h>
 
 #include <string>
 
@@ -57,7 +56,8 @@ public:
   int setnonblock(int soc, bool nb = true);
   int setlinger(int lg);
 
-  int shutdown(int how = SHUT_RDWR);
+  int shutdown(int& soc, int how);
+  int shutdown(int how);
   int close(int& soc);
   int close();
 

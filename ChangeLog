@@ -1,3 +1,6 @@
+2020-02-20: Hsiang Chen <a.chenxiang.z@gmail.com>
+	* Fixed issues may cause old version of GCC / CMake cannot process files
+
 2020-01-28: Hsiang Chen <a.chenxiang.z@gmail.com>
 	* Version 1.3 released
 	* Replace timeout watcher with condition variable

@@ -12,6 +12,7 @@
 namespace utils {
   void log(const std::string& fmt, ...);
   void log(const std::string& fmt, va_list ap);
+  void log_disp_timestamp(bool dts);
   void error(const std::string& fmt, ...);
   void dump(const void* ptr, size_t len);
   bool token(const std::string& str, const std::string& delim, std::vector<std::string>& result);

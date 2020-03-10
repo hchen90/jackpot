@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.6)
+cmake_minimum_required(VERSION 3.4)
 set(CMAKE_INSTALL_DATADIR "/usr/share")
 install(FILES jackpot.1 DESTINATION ${CMAKE_INSTALL_DATADIR}/man/man1)
 install(FILES jackpot.conf.5 DESTINATION ${CMAKE_INSTALL_DATADIR}/man/man5)

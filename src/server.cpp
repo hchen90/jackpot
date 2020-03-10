@@ -30,14 +30,12 @@
 #define DEF_CTX_NOTFOUND "HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n<html><head><title>404 Not Found</title></head><body><h1>404 Not Found</h1><p>File cannot be found</p></body></html>"
 #define DEF_CTX_SUCCESS "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n<html><head><title>Welcome</title><h1>Welcome</h1><p>This page is only for test</p></head></html>"
 
-#define DEF_TIMEOUT 20
-
 using namespace std;
 using namespace utils;
 
 /////////////////////////////////////////////////
 
-Client::Client() : _tls(nullptr), _ssl(nullptr), _fd_cli(-1), _done(false), _running(false), _timeout(DEF_TIMEOUT), _latest(0), _port_from(0), _td_trf(nullptr), _cv_cleanup(nullptr) {}
+Client::Client() : _tls(nullptr), _ssl(nullptr), _fd_cli(-1), _done(false), _running(false), _timeout(DEF_CTIMEOUT), _latest(0), _port_from(0), _td_trf(nullptr), _cv_cleanup(nullptr) {}
 
 Client::~Client()
 { 
@@ -129,7 +127,12 @@ bool Client::init(Server* srv, int fd, const string& ip_from, int port_from)
 {
   _running = true;
 
-  SSL* ssl = srv->_tls.ssl();
+  SSL* ssl = srv->_tls.ssl(ip_from, port_from);
+
+  _fd_cli = fd;
+  _ip_from = ip_from;
+  _port_from = port_from;
+  _cv_cleanup = &srv->_cv_cleanup;
 
   if (ssl != nullptr && _host.connect(srv->_soc.gethostip().c_str(), srv->_soc.getport()) != -1 && srv->_tls.fd(ssl, _host.socket()) > 0 && srv->_tls.connect(ssl) > 0) {
     fd_set fds;
@@ -137,24 +140,17 @@ bool Client::init(Server* srv, int fd, const string& ip_from, int port_from)
     FD_ZERO(&fds);
     FD_SET(_host.socket(), &fds);
 
-    struct timeval tmv = { .tv_sec = srv->_timeout, .tv_usec = 0 };
+    struct timeval tmv = { .tv_sec = srv->_ctimeout, .tv_usec = 0 };
 
     switch (select(_host.socket() + 1, nullptr, &fds, nullptr, &tmv)) {
       case -1:
       case 0:
-        _cv_cleanup = &srv->_cv_cleanup;
-        _ip_from = ip_from;
-        _port_from = port_from;
         break;
       default:
         if (srv->loc_accept(ssl)) {
-          _fd_cli = fd;
           _tls = &srv->_tls;
           _ssl = ssl;
-          _ip_from = ip_from;
-          _port_from = port_from;
-          _cv_cleanup = &srv->_cv_cleanup;
-          _timeout = srv->_timeout;
+          _timeout = srv->_ctimeout;
           return true;
         }
         break;
@@ -163,6 +159,9 @@ bool Client::init(Server* srv, int fd, const string& ip_from, int port_from)
 
   if (errno != 0 && errno != EINPROGRESS) error("init()");
   if (ssl != nullptr) srv->_tls.close(ssl);
+
+  stop();
+
   return false;
 }
 
@@ -202,12 +201,14 @@ void Client::transfer()
 Server::Server() : 
   _running(false),
   _issrv(false),
-  _timeout(DEF_TIMEOUT),
+  _ctimeout(DEF_CTIMEOUT),
+  _stimeout(DEF_STIMEOUT),
   _loc_addrinfo(nullptr),
   _loop(nullptr), 
   _w_soc(nullptr),
   _w_loc(nullptr),
   _w_sig(nullptr),
+  _w_tmo(nullptr),
   _td_cleanup(nullptr) {}
 
 Server::~Server()
@@ -219,7 +220,7 @@ bool Server::client(Conf& cfg)
 {
   if (! _tls.init()) { _tls.error(); return false; }
 
-  string pidfl;
+  string pidfl, logfl;
   
   if (cfg.get("main", "pidfile", pidfl) && ! pidfile(pidfl)) return false;
 
@@ -227,8 +228,12 @@ bool Server::client(Conf& cfg)
 
   string timeout;
 
-  if (cfg.get("main", "timeout", timeout)) {
-    _timeout = atol(timeout.c_str());
+  if (cfg.get("main", "ctimeout", timeout)) {
+    _ctimeout = atol(timeout.c_str());
+  }
+  
+  if (cfg.get("main", "stimeout", timeout)) {
+    _stimeout = atol(timeout.c_str());
   }
 
   string ip_tls, port_tls;
@@ -272,8 +277,12 @@ bool Server::server(Conf& cfg)
 
   string timeout;
 
-  if (cfg.get("main", "timeout", timeout)) {
-    _timeout = atol(timeout.c_str());
+  if (cfg.get("main", "ctimeout", timeout)) {
+    _ctimeout = atol(timeout.c_str());
+  }
+
+  if (cfg.get("main", "stimeout", timeout)) {
+    _stimeout = atol(timeout.c_str());
   }
 
   string ip_tls, port_tls;
@@ -344,6 +353,11 @@ void Server::start_client()
       _w_sig->set<Server, &Server::signal_cb>(this);
       _w_sig->start();
     }
+    if ((_w_tmo = new ev::timer()) != nullptr) {
+      _w_tmo->set(_stimeout, _stimeout);
+      _w_tmo->set<Server, &Server::timeout_cb>(this);
+      _w_tmo->start();
+    }
     _td_cleanup = new thread(cleanup_td, this);
     log("SOCKS5 server is listening on [%s:%u]", _loc.gethostip().c_str(), _loc.getport());
     _loop->run();
@@ -370,6 +384,11 @@ void Server::start_server()
       _w_sig->set<Server, &Server::signal_cb>(this);
       _w_sig->start();
     }
+    if ((_w_tmo = new ev::timer()) != nullptr) {
+      _w_tmo->set(_stimeout, _stimeout);
+      _w_tmo->set<Server, &Server::timeout_cb>(this);
+      _w_tmo->start();
+    }
     _td_cleanup = new thread(cleanup_td, this);
     log("Proxy server is listening on [%s:%u]", _soc.gethostip().c_str(), _soc.getport());
     log("Web server is listening on [%s:%u]", _loc.gethostip().c_str(), _loc.getport());
@@ -381,6 +400,7 @@ void Server::stop_client()
 {
   if (_w_loc != nullptr) { delete _w_loc; _w_loc = nullptr; }
   if (_w_sig != nullptr) { delete _w_sig; _w_sig = nullptr; }
+  if (_w_tmo != nullptr) { delete _w_tmo; _w_tmo = nullptr; }
   if (_loop  != nullptr) { delete _loop;  _loop  = nullptr; }
   if (_loc_addrinfo != nullptr) { _soc.resolve(nullptr, 0, &_loc_addrinfo); _loc_addrinfo = nullptr; }
   _running = false;
@@ -400,6 +420,7 @@ void Server::stop_server()
   if (_w_soc != nullptr) { delete _w_soc; _w_soc = nullptr; }
   if (_w_loc != nullptr) { delete _w_loc; _w_loc = nullptr; }
   if (_w_sig != nullptr) { delete _w_sig; _w_sig = nullptr; }
+  if (_w_tmo != nullptr) { delete _w_tmo; _w_tmo = nullptr; }
   if (_loop  != nullptr) { delete _loop;  _loop  = nullptr; }
   _running = false;
   if (_td_cleanup != nullptr) {
@@ -422,14 +443,12 @@ bool Server::web_hdrinfo(const void* ptr, size_t len, string& cmd, string& path,
   smatch sm;
   string str((const char*) ptr, MIN(len, 64));
 
-//log("web_hdrinfo {ptr:%p, len:%u} content:%s", ptr, len, str.c_str());
   if (regex_search(str, sm, re) && sm.size() == 4) {
     cmd = sm[1];
     path = sm[2];
     ver = sm[3];
     return true;
   }
-//log("web_hdrinfo {ptr:%p, len:%u} content:%s - %s - %s", ptr, len, cmd.c_str(), path.c_str(), ver.c_str());
 
   return false;
 }
@@ -566,7 +585,7 @@ bool Server::loc_accept(SSL* ssl)
   req += "Content-Type: text/html\r\nConnection: keep-alive\r\nContent-Language: en\r\n\r\n";
 
   if (_tls.write(ssl, (void*) req.data(), req.size()) <= 0) {
-    _tls.error();
+    _tls.error(ssl);
     return false;
   }
 
@@ -618,39 +637,64 @@ bool Server::soc_accept(SSL* ssl)
 
 void Server::soc_accept_cb(ev::io& w, int revents)
 {
+  w.stop();
+
   char ip[MAX(INET_ADDRSTRLEN, INET6_ADDRSTRLEN) + 2];
   int port, fd = _soc.accept(ip, port);
 
   if (fd != -1) {
     soc_new_connection(fd, ip, port);
   } else error("soc_accept");
+  
+  w.start();
 }
 
 void Server::web_accept_cb(ev::io& w, int revents)
 {
+  w.stop();
+
   char ip[MAX(INET_ADDRSTRLEN, INET6_ADDRSTRLEN) + 2];
   int port, fd = _loc.accept(ip, port);
 
   if (fd != -1) {
     web_new_connection(fd, ip, port);
   } else error("web_accept");
+
+  w.start();
 }
 
 void Server::loc_accept_cb(ev::io& w, int revents)
 {
+  w.stop();
+
   char ip[MAX(INET_ADDRSTRLEN, INET6_ADDRSTRLEN) + 2];
   int port, fd = _loc.accept(ip, port);
 
   if (fd != -1) {
     loc_new_connection(fd, ip, port);
   } else error("loc_accept");
+  
+  w.start();
 }
 
 void Server::signal_cb(ev::sig& w, int revents)
 {
+  w.stop();
+
   stop();
   log("Exitting...");
   exit(EXIT_SUCCESS);
+
+  w.start();
+}
+
+void Server::timeout_cb(ev::timer& w, int revents)
+{
+  w.stop();
+
+  _cv_cleanup.notify_one();
+
+  w.again();
 }
 
 ////////////////////////////////////////////
@@ -662,14 +706,14 @@ void Server::cleanup_td(Server* self)
     self->_cv_cleanup.wait(lck);
     if (self->_issrv) {
       self->_lst_socks5.remove_if([self](SOCKS5*& socks5) {
-        if (socks5->done() || (socks5->time() - ::time(nullptr)) > self->_timeout * 2) {
+        if (socks5->done() || (socks5->time() - ::time(nullptr)) > self->_ctimeout * 2) {
           delete socks5;
           return true;
         } else return false;
       });
     } else {
       self->_lst_client.remove_if([self](Client*& cli) {
-        if (cli->done() || (cli->time() - ::time(nullptr)) > self->_timeout * 2) {
+        if (cli->done() || (cli->time() - ::time(nullptr)) > self->_ctimeout * 2) {
           delete cli;
           return true;
         } else return false;

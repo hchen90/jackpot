@@ -62,9 +62,11 @@ void usage(void)
         << "  -e [page]         set web page file" << endl \
         << "  -a [wip]          set ip address for Web/SOCKS5 server" << endl \
         << "  -w [wport]        set port number for Web/SOCKS5 server" << endl \
-        << "  -t [timeout]      set timeout" << endl \
+        << "  -t [ctimeout]     set timeout of connection" << endl \
         << "  -m [pidfile]      set PID file" << endl \
         << "  -n [config]       set configuration file" << endl \
+        << "  -d                display timestamp in log record" << endl \
+        << "  -g [stimeout]     set timeout of scheduler" << endl \
         << endl \
         << "Report bugs to <" << PACKAGE_BUGREPORT << ">." << endl;
 }
@@ -74,10 +76,10 @@ int main(int argc, char* argv[])
   string  ip_tls, port_tls, \
           ip_web, port_web, \
           key, cert, serial, nmpwd, \
-          page, cfgfile, pidfile, timeout;
+          page, cfgfile, pidfile, ctimeout, stimeout;
   short   opt, tags = 0;
 
-  while ((opt = getopt(argc, argv, "hvbi:p:k:c:s:e:a:w:t:m:n:")) != -1) {
+  while ((opt = getopt(argc, argv, "hvi:p:k:c:s:e:a:w:t:m:n:db:f:g:")) != -1) {
     switch (opt) {
       case 'h':
         usage();
@@ -117,8 +119,8 @@ int main(int argc, char* argv[])
         port_web = optarg;
         tags |= 0x80;
         break;
-      case 't': // timeout
-        timeout = optarg;
+      case 't': // timeout of connection
+        ctimeout = optarg;
         tags |= 0x100;
         break;
       case 'm': // PID file
@@ -128,6 +130,13 @@ int main(int argc, char* argv[])
       case 'n': // configuration file
         cfgfile = optarg;
         tags |= 0x400;
+        break;
+      case 'd': // display timestamp
+        log_disp_timestamp(true);
+        break;
+      case 'g': // timeout of scheduler
+        stimeout = optarg;
+        tags |= 0x800;
         break;
       default:
         usage();
@@ -143,6 +152,7 @@ int main(int argc, char* argv[])
   if (tags > 0) {
     if (tags & 0x400 && ! cfg.open(cfgfile)) {
       error(cfgfile.c_str());
+      return EXIT_FAILURE;
     }
 
     if (tags & 0x1) cfg.set("tls", "ip", ip_tls);
@@ -150,8 +160,9 @@ int main(int argc, char* argv[])
     if (tags & 0x4) cfg.set("main", "private_key", key);
     if (tags & 0x8) cfg.set("main", "certificate", cert);
     if (tags & 0x10) cfg.set("main", "serial", serial);
-    if (tags & 0x100) cfg.set("main", "timeout", timeout);
+    if (tags & 0x100) cfg.set("main", "ctimeout", ctimeout);
     if (tags & 0x200) cfg.set("main", "pidfile", pidfile);
+    if (tags & 0x800) cfg.set("main", "stimeout", stimeout);
 
     if (cfg.get("main", "private_key", key) && cfg.get("main", "certificate", cert)) {
       if (tags & 0x20) cfg.set("web", "page", page);

@@ -81,6 +81,7 @@ private:
   void web_accept_cb(ev::io& w, int revents);
   void loc_accept_cb(ev::io& w, int revents);
   void signal_cb(ev::sig& w, int revents);
+  void timeout_cb(ev::timer& w, int revents);
 
   void soc_new_connection(int fd, const char* ip, int port);
   void web_new_connection(int fd, const char* ip, int port);
@@ -94,7 +95,7 @@ private:
   ///////////////////////////////////////////////
   
   bool _running, _issrv;
-  time_t _timeout;
+  time_t _ctimeout, _stimeout;
 
   TLS _tls;
 
@@ -116,6 +117,7 @@ private:
   ev::io* _w_soc;
   ev::io* _w_loc;
   ev::sig* _w_sig;
+  ev::timer* _w_tmo;
 
   std::condition_variable _cv_cleanup;
   std::mutex _mutex_cleanup;

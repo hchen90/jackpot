@@ -312,6 +312,11 @@ int Socks::setlinger(int lg)
   return setsockopt(socket_fd, SOL_SOCKET, SO_LINGER, &lgr, sizeof(lgr));
 }
 
+int Socks::shutdown(int& soc, int how)
+{
+  return ::shutdown(soc, how);
+}
+
 int Socks::shutdown(int how)
 {
   return ::shutdown(socket_fd, how);
@@ -319,12 +324,14 @@ int Socks::shutdown(int how)
 
 int Socks::close()
 {
+  shutdown(SHUT_RDWR);
   return close(socket_fd);
 }
 
 int Socks::close(int& soc)
 {
   if (soc != -1) {
+    shutdown(soc, SHUT_RDWR);
     int n = ::close(soc);
     soc = -1;
     return n;
