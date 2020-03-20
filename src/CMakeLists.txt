@@ -5,8 +5,10 @@ if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.8)
   message(FATAL_ERROR "GCC version is too old, 4.8 or higher required")
 endif(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.8)
 
+option(USE_SSTREAM "Use sstream" OFF)
+
 set(PACKAGE_NAME "jackpot")
-set(PACKAGE_VERSION "1.3")
+set(PACKAGE_VERSION "1.4")
 set(PACKAGE_URL "https://github.com/hchen90/jackpot.git")
 set(PACKAGE_BUGREPORT "a.chenxiang.z@gmail.com")
 configure_file(config.h.in config.h @ONLY)

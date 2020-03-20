@@ -7,7 +7,7 @@
 #define	_CONFIG_H_
 
 #define PACKAGE_NAME "jackpot"
-#define PACKAGE_VERSION "1.3"
+#define PACKAGE_VERSION "1.4"
 #define PACKAGE_URL "https://github.com/hchen90/jackpot.git"
 #define PACKAGE_BUGREPORT "a.chenxiang.z@gmail.com"
 
@@ -23,7 +23,10 @@
 #define DEF_CTIMEOUT 20
 #define DEF_STIMEOUT 108000
 
-#undef USE_SSTREAM
-//#define USE_SSTREAM
+typedef unsigned char uint8_t;
+typedef unsigned short uint16_t;
+typedef unsigned int uint32_t;
+
+/* #undef USE_SSTREAM */
 
 #endif	/* _CONFIG_H_ */

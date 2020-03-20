@@ -26,16 +26,72 @@
 
 using namespace std;
 
-Conf::Conf() {}
+Conf::Conf() { _settings.clear(); }
 
 Conf::~Conf()
 {
   for (auto& it : _settings) {
     if (it.second != nullptr) {
       it.second->clear();
-      delete it.second;
     }
   }
+}
+
+bool Conf::open(const void* ptr, size_t len)
+{
+  if (ptr == nullptr) return false;
+  if (len <= 0) return false;
+
+  char* last = (char*) ptr + len;
+  char* start = (char*) ptr;
+  char* end = strchr(start, '\n');
+
+  if (end == nullptr) end = strchr(start, 0);
+  
+  smatch sm;
+
+  regex re_bla("[\t ]+*");
+  regex re_cmt("[\t ]+*;.*");
+  regex re_sec("\\[([A-Za-z_0-9]+)\\]");
+  regex re_par("[\t ]+*([A-Za-z_0-9]+)[\t ]+*=[\t ]+*([^\t ]+)");
+
+  string session = ANONYMOUS_KEY;
+
+  _settings.clear();
+
+  bool okay = false;
+
+  while (start < last && end != nullptr) {
+    if (start >= end) break;
+
+    string line = string(start, end - start);
+
+    if (regex_match(line, re_bla)) {
+      // blank line
+    } else if (regex_match(line, re_cmt)) {
+      // comment
+    } else if (regex_search(line, sm, re_sec) && sm.size() == 2) { // section
+      session = sm[1];
+    } else if (regex_search(line, sm, re_par) && sm.size() == 3) { // search kay-value pair
+      if (_settings.find(session) == _settings.end()) {
+        _settings.insert(make_pair(session, make_shared<map<string, string>>()));
+      }
+      auto lt = _settings.find(session);
+      if (lt != _settings.end() && lt->second != nullptr) {
+        lt->second->insert(make_pair(sm[1], sm[2]));
+      }
+    } else break;
+
+    okay = true;
+
+    for (start = end; *start == '\n'; ) start++;
+
+    end = strchr(start, '\n');
+
+    if (end == nullptr) end = strchr(start, '\0');
+  }
+
+  return okay;
 }
 
 bool Conf::open(const string& file)
@@ -51,6 +107,8 @@ bool Conf::open(const string& file)
     regex re_sec("\\[([A-Za-z_0-9]+)\\]");
     regex re_par("[\t ]+*([A-Za-z_0-9]+)[\t ]+*=[\t ]+*([^\t ]+)");
 
+    _settings.clear();
+
     while (true) {
       if (getline(fin, line)) {
         if (regex_match(line, re_bla)) continue; // skip blank line
@@ -59,10 +117,10 @@ bool Conf::open(const string& file)
           session = sm[1];
         } else if (regex_search(line, sm, re_par) && sm.size() == 3) { // search kay = value pair
           if (_settings.find(session) == _settings.end()) {
-            _settings.insert(make_pair(session, new map<string, string>()));
+            _settings.insert(make_pair(session, make_shared<map<string, string>>()));
           }
           auto lt = _settings.find(session);
-          if (lt != _settings.end() && lt->second != nullptr) {
+          if (lt != _settings.end() && lt->second) {
             lt->second->insert(make_pair(sm[1], sm[2]));
           }
         } else break;
@@ -82,7 +140,7 @@ void Conf::update(const string& file)
 
   if (fout.good()) {
     for (auto& it : _settings) {
-      if (it.second != nullptr && ! it.second->empty()) {
+      if (it.second && ! it.second->empty()) {
         if (it.first != ANONYMOUS_KEY) {
           fout << "[" << it.first << "]" << endl;
         }
@@ -94,13 +152,39 @@ void Conf::update(const string& file)
   }
 }
 
+// return total number of items in [section]
+size_t Conf::get(const string& sec)
+{
+  auto it = _settings.find(sec);
+  if (it != _settings.end() && it->second) return it->second->size();
+  return 0;
+}
+
+// get key name by specifing index in [section]
+bool Conf::get(const string& sec, size_t index, string& key)
+{
+  auto it = _settings.find(sec);
+  if (it != _settings.end() && it->second) {
+    for (auto& lt : *it->second) {
+      if (index == 0) {
+        key = lt.first;
+        return true;
+      } else {
+        index--;
+      }
+    }
+  }
+
+  return false;
+}
+
 bool Conf::get(const string& sec, const string& key, string& value, bool gt)
 {
   if (! gt && _settings.find(sec) == _settings.end()) {
-    _settings.insert(make_pair(sec, new map<string, string>()));
+    _settings.insert(make_pair(sec, make_shared<map<string, string>>()));
   }
   auto it = _settings.find(sec);
-  if (it != _settings.end() && it->second != nullptr) {
+  if (it != _settings.end() && it->second) {
     if (! gt && it->second->find(key) == it->second->end()) {
       it->second->insert(make_pair(key, value));
       return true;
@@ -127,7 +211,7 @@ void Conf::set(const string& sec, const string& key, const string& value)
 void Conf::del(const string& sec, const string& key)
 {
   auto it = _settings.find(sec);
-  if (it != _settings.end() && it->second != nullptr) {
+  if (it != _settings.end() && it->second) {
     auto lt = it->second->find(key);
     if (lt != it->second->end()) {
       it->second->erase(lt);
@@ -139,9 +223,8 @@ void Conf::del(const string& sec)
 {
   auto it = _settings.find(sec);
   if (it != _settings.end()) {
-    if (it->second != nullptr) {
+    if (it->second) {
       it->second->clear();
-      delete it->second;
     }
     _settings.erase(it);
   }

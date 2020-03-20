@@ -24,15 +24,17 @@
 using namespace std;
 using namespace utils;
 
-SOCKS5::SOCKS5() : _fd_tls(-1), _port_from(0), _done(false), _running(false), _stage(STAGE_INIT), _timeout(DEF_CTIMEOUT), _latest(0), _nmpwd(nullptr), _tls(nullptr), _ssl(nullptr), _td_socks5(nullptr), _cv_cleanup(nullptr) {}
+SOCKS5::SOCKS5() : _fd_tls(-1), _port_from(0), _running(false), _iswebsv(false), _stage(STAGE_INIT), _timeout(DEF_CTIMEOUT), _nmpwd(nullptr), _tls(nullptr), _ssl(nullptr), _td_socks5(nullptr), _cv_cleanup(nullptr) {}
 
 SOCKS5::~SOCKS5()
 { 
-  stop();
-  if (_ssl != nullptr && _tls != nullptr) { _tls->close(_ssl); _ssl = nullptr; }
-  _target.close(_fd_tls);
-  _target.close();
-  log("[%s:%u] closing connection", _ip_from.c_str(), _port_from);
+  if (! _iswebsv) {
+    stop();
+    if (_ssl != nullptr && _tls != nullptr) { _tls->close(_ssl); _ssl = nullptr; }
+    _target.close(_fd_tls);
+    _target.close();
+    log("[%s:%u] closing connection", _ip_from.c_str(), _port_from);
+  }
 }
 void SOCKS5::start(Server* srv, int fd, const string& ip_from, int port_from)
 {
@@ -43,7 +45,7 @@ void SOCKS5::start(Server* srv, int fd, const string& ip_from, int port_from)
 
 void SOCKS5::stop()
 {
-  if (_running) {
+  if (_running && ! _iswebsv) {
     _done = true;
     _running = false;
     if (_cv_cleanup != nullptr) {
@@ -274,12 +276,12 @@ short SOCKS5::stage_conn()
   FD_SET(_fd_tls, &rfds);
   FD_SET(fd_tgt, &rfds);
 
-  struct timeval tmv = { .tv_sec = _timeout, .tv_usec = 0 };
-
   bool endloop = false;
 
   while (_running && ! endloop) {
     memcpy(&fds, &rfds, sizeof(fds));
+
+    struct timeval tmv = { .tv_sec = _timeout, .tv_usec = 0 };
 
     switch (select(MAX(fd_tgt, _fd_tls) + 1, &fds, nullptr, nullptr, &tmv)) {
       case 0:
@@ -324,7 +326,8 @@ short SOCKS5::stage_udpp()
 void SOCKS5::socks5_td(SOCKS5* self, Server* srv, int fd, const string& ip_from, int port_from)
 {
   if (self->init(srv, fd, ip_from, port_from)) {
-    self->transfer();
+    if (self->_iswebsv) self->WebSv::transfer();
+    else self->transfer();
   } else {
     self->stop();
   }
@@ -362,6 +365,10 @@ bool SOCKS5::init(Server* srv, int fd, const string& ip_from, int port_from)
             _nmpwd = &srv->_nmpwd;
           }
           return true;
+        } else {
+          if (WebSv::init(srv, fd, ip_from, port_from, ssl)) {
+            return _iswebsv = true;
+          }
         }
         break;
     }

@@ -11,50 +11,17 @@
 #include <thread>
 #include <list>
 #include <map>
+#include <memory>
+#include <mutex>
 
 #include <ev++.h>
 
 #include "conf.h"
 #include "socks.h"
 #include "socks5.h"
-
-class Server;
-
-class Client {
-public:
-  Client();
-  ~Client();
-
-  void start(Server* srv, int fd, const std::string& ip_from, int port_from);
-  void stop();
-  bool done();
-
-  time_t time();
-private:
-  bool read_cli();
-  bool read_tls();
-
-  bool init(Server* srv, int fd, const std::string& ip_from, int port_from);
-  void transfer();
-
-  static void client_td(Client* self, Server* srv, int fd, const std::string& ip_from, int port_from);
-
-  Socks _host;
-
-  TLS* _tls;
-  SSL* _ssl;
-
-  int _fd_cli;
-
-  bool _done, _running;
-  time_t _timeout, _latest;
-
-  std::string _ip_from;
-  int _port_from;
-
-  std::thread* _td_trf;
-  std::condition_variable* _cv_cleanup;
-};
+#include "client.h"
+#include "websv.h"
+#include "ctxwrapper.h"
 
 class Server {
 public:
@@ -69,7 +36,6 @@ private:
   bool pidfile(const std::string& pidfl);
 
   bool web_hdrinfo(const void* ptr, size_t len, std::string& cmd, std::string& path, std::string& ver);
-  bool web_initpage(const std::string& page);
   void socks5_initnmpwd(Conf& cfg);
 
   void start_client();
@@ -94,8 +60,10 @@ private:
 
   ///////////////////////////////////////////////
   
-  bool _running, _issrv;
+  bool _running, _issrv, _norootfs;
   time_t _ctimeout, _stimeout;
+
+  CtxWrapper _ctxwrapper;
 
   TLS _tls;
 
@@ -105,11 +73,12 @@ private:
   Socks _loc; // default: [server] port 80
               // default: [client] port 1080
 
-  std::string _200_ctx, _400_ctx, _404_ctx, _serial, _pidfile;
+  std::string _serial, _pidfile;
   std::map<std::string, std::string> _nmpwd;
 
-  std::list<SOCKS5*> _lst_socks5;
-  std::list<Client*> _lst_client;
+  std::list<std::shared_ptr<SOCKS5>> _lst_socks5;
+  std::list<std::shared_ptr<Client>> _lst_client;
+  std::list<std::shared_ptr<WebSv>> _lst_websv;
 
   struct addrinfo* _loc_addrinfo;
 
@@ -117,14 +86,14 @@ private:
   ev::io* _w_soc;
   ev::io* _w_loc;
   ev::sig* _w_sig;
-  ev::timer* _w_tmo;
 
   std::condition_variable _cv_cleanup;
-  std::mutex _mutex_cleanup;
+  std::mutex _mutex_cleanup, _mutex_inprogress;
   std::thread* _td_cleanup;
 
   friend Client;
   friend SOCKS5;
+  friend WebSv;
 };
 
 #endif	/* _SERVER_H_ */

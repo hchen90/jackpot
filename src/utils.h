@@ -16,6 +16,7 @@ namespace utils {
   void error(const std::string& fmt, ...);
   void dump(const void* ptr, size_t len);
   bool token(const std::string& str, const std::string& delim, std::vector<std::string>& result);
+  std::string chomp(const std::string& str);
 };
 
 #endif	/* _UTILS_H_ */

@@ -95,8 +95,8 @@ int Socks::bind(const struct sockaddr* addr, socklen_t addr_len, int tags, bool 
   if (ret == -1) {
     if (errno == EINPROGRESS) {
       fd_set fds; FD_ZERO(&fds); FD_SET(socket_fd, &fds);
-      struct timeval tmv = { .tv_sec = 2, .tv_usec = 0 };
       for (int i = 0; i < 4; i++) {
+        struct timeval tmv = { .tv_sec = 2, .tv_usec = 0 };
         if ((ret = select(socket_fd + 1, nullptr, &fds, nullptr, &tmv)) < 0 && errno != EINTR) {
           break;
         } else if (ret > 0) {

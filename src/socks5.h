@@ -13,6 +13,7 @@
 
 #include "socks.h"
 #include "tls.h"
+#include "websv.h"
 
 #define SOCKS5_VER '\x05'
 #define SOCKS5_AUTHVER '\x01'
@@ -57,7 +58,7 @@
 
 class Server;
 
-class SOCKS5 {
+class SOCKS5 : public WebSv {
 public:
   SOCKS5();
   ~SOCKS5();
@@ -86,9 +87,9 @@ private:
   static void socks5_td(SOCKS5* self, Server* srv, int fd, const std::string& ip_from, int port_from);
 
   int _fd_tls, _port_from;
-  bool _done, _running;
+  bool _running, _iswebsv;
   short _stage;
-  time_t _timeout, _latest;
+  time_t _timeout;
 
   std::string _ip_from;
   std::map<std::string, std::string>* _nmpwd;

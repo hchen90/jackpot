@@ -1,3 +1,7 @@
+2020-03-12: Hsiang Chen <a.chenxiang.z@gmail.com>
+	* Add CPIO feature
+	* Enhanced web service
+
 2020-02-20: Hsiang Chen <a.chenxiang.z@gmail.com>
 	* Fixed issues may cause old version of GCC / CMake cannot process files
 

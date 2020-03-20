@@ -7,20 +7,24 @@
 #define	_CONF_H_
 
 #include <string>
+#include <memory>
 #include <map>
 
 class Conf {
 public:
   Conf();
   ~Conf();
+  bool open(const void* ptr, size_t len);
   bool open(const std::string& file);
   void update(const std::string& file);
+  size_t get(const std::string& sec);
+  bool get(const std::string& sec, size_t index, std::string& key);
   bool get(const std::string& sec, const std::string& key, std::string& value, bool gt = true);
   void set(const std::string& sec, const std::string& key, const std::string& value);
   void del(const std::string& sec, const std::string& key);
   void del(const std::string& sec);
 private:
-  std::map<std::string, std::map<std::string, std::string>*> _settings;
+  std::map<std::string, std::shared_ptr<std::map<std::string, std::string>>> _settings;
 };
 
 #endif	/* _CONF_H_ */

@@ -7,6 +7,7 @@
 #define	_TLS_H_
 
 #include <map>
+#include <memory>
 #include <string>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
@@ -39,7 +40,7 @@ public:
 private:
   SSL_CTX* _ctx;
 
-  std::map<SSL*, SSLcli*> _sslcli;
+  std::map<SSL*, std::shared_ptr<SSLcli>> _sslcli;
 };
 
 #endif	/* _TLS_H_ */

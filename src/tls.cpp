@@ -23,6 +23,7 @@ using namespace std;
 
 TLS::TLS() : _ctx(nullptr)
 {
+  _sslcli.clear();
   SSL_load_error_strings();
   OpenSSL_add_ssl_algorithms();
 }
@@ -69,8 +70,8 @@ SSL* TLS::ssl(const string& ip, int port)
   if (_ctx != nullptr) {
     SSL* s = SSL_new(_ctx);
     if (s != nullptr) {
-      SSLcli* sc = new SSLcli();
-      if (sc != nullptr) {
+      shared_ptr<SSLcli> sc = make_shared<SSLcli>();
+      if (sc) {
         sc->port = port;
         sc->ip = ip;
         _sslcli.insert(make_pair(s, sc));
@@ -137,7 +138,6 @@ void TLS::close(SSL* ssl)
   if (ssl != nullptr) {
     auto sc = _sslcli.find(ssl);
     if (sc != _sslcli.end()) {
-      delete sc->second;
       _sslcli.erase(sc);
     }
     SSL_shutdown(ssl);
@@ -154,7 +154,7 @@ void TLS::error(SSL* ssl)
 
       str += sc->second->ip + ":";
 
-      char buf[BUFSIZ];
+      char buf[8];
       snprintf(buf, sizeof(buf), "%u", sc->second->port);
       
       str += buf;

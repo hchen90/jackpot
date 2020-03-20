@@ -38,7 +38,7 @@ Server server;
 
 void sigsegt(int sig)
 {
-  void* arr[32];
+  void* arr[32] = { nullptr };
   size_t siz = backtrace(arr, 32);
   backtrace_symbols_fd(arr, siz, STDERR_FILENO);
   exit(EXIT_FAILURE);
@@ -59,7 +59,7 @@ void usage(void)
         << "  -k [private_key]  set private key file" << endl \
         << "  -c [certificate]  set certificate file" << endl \
         << "  -s [serial]       set serial string" << endl \
-        << "  -e [page]         set web page file" << endl \
+        << "  -e [rootfs]       set web archive" << endl \
         << "  -a [wip]          set ip address for Web/SOCKS5 server" << endl \
         << "  -w [wport]        set port number for Web/SOCKS5 server" << endl \
         << "  -t [ctimeout]     set timeout of connection" << endl \
@@ -67,6 +67,7 @@ void usage(void)
         << "  -n [config]       set configuration file" << endl \
         << "  -d                display timestamp in log record" << endl \
         << "  -g [stimeout]     set timeout of scheduler" << endl \
+        << "  -j [wtimeout]     set timeout of web service" << endl \
         << endl \
         << "Report bugs to <" << PACKAGE_BUGREPORT << ">." << endl;
 }
@@ -76,10 +77,10 @@ int main(int argc, char* argv[])
   string  ip_tls, port_tls, \
           ip_web, port_web, \
           key, cert, serial, nmpwd, \
-          page, cfgfile, pidfile, ctimeout, stimeout;
+          page, cfgfile, pidfile, ctimeout, stimeout, wtimeout;
   short   opt, tags = 0;
 
-  while ((opt = getopt(argc, argv, "hvi:p:k:c:s:e:a:w:t:m:n:db:f:g:")) != -1) {
+  while ((opt = getopt(argc, argv, "hvi:p:k:c:s:e:a:w:t:m:n:db:f:g:j:")) != -1) {
     switch (opt) {
       case 'h':
         usage();
@@ -138,6 +139,10 @@ int main(int argc, char* argv[])
         stimeout = optarg;
         tags |= 0x800;
         break;
+      case 'j': // timeout of web service
+        wtimeout = optarg;
+        tags |= 0x1000;
+        break;
       default:
         usage();
         return EXIT_FAILURE;
@@ -160,12 +165,13 @@ int main(int argc, char* argv[])
     if (tags & 0x4) cfg.set("main", "private_key", key);
     if (tags & 0x8) cfg.set("main", "certificate", cert);
     if (tags & 0x10) cfg.set("main", "serial", serial);
-    if (tags & 0x100) cfg.set("main", "ctimeout", ctimeout);
+    if (tags & 0x100) cfg.set("tls", "timeout", ctimeout);
     if (tags & 0x200) cfg.set("main", "pidfile", pidfile);
-    if (tags & 0x800) cfg.set("main", "stimeout", stimeout);
+    if (tags & 0x800) cfg.set("main", "timeout", stimeout);
+    if (tags & 0x1000) cfg.set("web", "timeout", wtimeout);
 
     if (cfg.get("main", "private_key", key) && cfg.get("main", "certificate", cert)) {
-      if (tags & 0x20) cfg.set("web", "page", page);
+      if (tags & 0x20) cfg.set("web", "rootfs", page);
       if (tags & 0x40) cfg.set("web", "ip", ip_web);
       if (tags & 0x80) cfg.set("web", "port", port_web);
       if (server.server(cfg)) server.start();

@@ -20,14 +20,17 @@
 #include <cstring>
 #include <iostream>
 #include <mutex>
+#include <regex>
 #include <string>
+
+#include "config.h"
 
 #ifdef USE_SSTREAM
 #include <sstream>
 #endif
 
 #include "utils.h"
-#include "config.h"
+
 
 static std::mutex _std_log_mutex, _std_err_mutex;
 
@@ -62,7 +65,7 @@ void utils::log(const std::string& fmt, va_list ap)
       snprintf(suf, sizeof(suf), "%u", (uint32_t) time(nullptr));
 
       str += suf;
-      str += "]";
+      str += "] ";
       str += buf;
 #endif
     } else {
@@ -180,10 +183,20 @@ void utils::dump(const void* ptr, size_t len)
 
 bool utils::token(const std::string& str, const std::string& delim, std::vector<std::string>& result)
 {
-  char* saveptr = nullptr,* ptr;
+  char* sss = new char[str.size() + 1];
+
+  if (sss == nullptr) return false;
+
+  memcpy(sss, str.c_str(), str.size());
+
+  sss[str.size()] = 0;
+
+  char* saveptr = nullptr;
   const char* dlm = delim.c_str();
 
-  for (ptr = (char*) str.c_str(); ; ptr = nullptr) {
+  result.clear();
+
+  for (char* ptr = sss; ; ptr = nullptr) {
     char* s = strtok_r(ptr, dlm, &saveptr);
     if (s != nullptr) {
       result.push_back(s);
@@ -192,7 +205,17 @@ bool utils::token(const std::string& str, const std::string& delim, std::vector<
     }
   }
 
+  delete[] sss;
+
   return ! result.empty();
+}
+
+std::string utils::chomp(const std::string& str)
+{
+  std::smatch sma;
+  std::regex rec("[\\r\\n]+*([^\\r\\n]+)[\\r\\n]+*");
+  if (std::regex_search(str, sma, rec) && sma.size() == 2) return sma[1];
+  return str;
 }
 
 /*end*/
