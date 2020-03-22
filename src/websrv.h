@@ -1,10 +1,10 @@
-/* $ @websv.h
+/* $ @websrv.h
  * Copyright (C) 2020 Hsiang Chen
  * This software is free software,you can redistributed in the term of GNU Public License.
  * For detail see <http://www.gnu.org/licenses>
  * */
-#ifndef	_WEBSV_H_
-#define	_WEBSV_H_
+#ifndef	_WEBSRV_H_
+#define	_WEBSRV_H_
 
 #include <condition_variable>
 #include <string>
@@ -18,10 +18,10 @@
 
 class Server;
 
-class WebSv {
+class WebSrv {
 public:
-  WebSv();
-  ~WebSv();
+  WebSrv();
+  ~WebSrv();
 
   void start(Server* srv, int fd, const std::string& ip_from, int port_from);
   void stop();
@@ -35,7 +35,7 @@ protected:
   time_t _latest;
   bool _done;
 private:
-  static void websv_td(WebSv* self, Server* srv, int fd, const std::string& ip_from, int port_from);
+  static void websrv_td(WebSrv* self, Server* srv, int fd, const std::string& ip_from, int port_from);
 
   Server* _server;
 
@@ -52,4 +52,4 @@ private:
   std::condition_variable* _cv_cleanup;
 };
 
-#endif	/* _WEBSV_H_ */
+#endif	/* _WEBSRV_H_ */

@@ -124,6 +124,9 @@ bool CtxWrapper::updatecpio()
 void CtxWrapper::closecpio()
 {
   if (! _rootfs.empty()) {
+#ifndef USE_SMARTPOINTER
+    for (auto& it : _rootfs) delete it.second;
+#endif
     _rootfs.clear();
   }
 }
@@ -267,9 +270,14 @@ bool CtxWrapper::setfile(const string& filename, CPIOAttr& attr, CPIOContent& ct
     it->second->_ctx = ctx;
     return true;
   } else {
+#ifdef USE_SMARTPOINTER
     shared_ptr<CtxFile> fobj = make_shared<CtxFile>();
-
-    if (fobj) {
+    if (fobj)
+#else
+    CtxFile* fobj = new CtxFile();
+    if (fobj != nullptr)
+#endif
+    {
       fobj->_attr = attr;
       fobj->_ctx = ctx;
       fobj->_visible = true;
@@ -291,6 +299,9 @@ bool CtxWrapper::delfile(const string& filename)
   auto it = _rootfs.find(flnm);
 
   if (it != _rootfs.end()) {
+#ifndef USE_SMARTPOINTER
+    delete it->second;
+#endif
     _rootfs.erase(it);
     return true;
   }
@@ -305,9 +316,14 @@ time_t& CtxWrapper::timeout()
 
 bool CtxWrapper::input(string& filename, CPIOAttr& attr, CPIOContent& ctx)
 {
+#ifdef USE_SMARTPOINTER
   shared_ptr<CtxFile> fobj = make_shared<CtxFile>();
-  
-  if (fobj) {
+  if (fobj)
+#else
+  CtxFile* fobj = new CtxFile();
+  if (fobj != nullptr)
+#endif
+  {
     string flnm = filepath(filename);
 
     fobj->_attr = attr;
@@ -326,10 +342,18 @@ bool CtxWrapper::output(string& filename, CPIOAttr& attr, CPIOContent& ctx)
   auto it = _rootfs.begin();
 
   if (it != _rootfs.end()) {
-    if (it->second) {
+#ifdef USE_SMARTPOINTER
+    if (it->second)
+#else
+    if (it->second != nullptr)
+#endif
+    {
       filename = it->first;
       attr = it->second->_attr;
       ctx = it->second->_ctx;
+#ifndef USE_SMARTPOINTER
+      delete it->second;
+#endif
     }
     _rootfs.erase(it);
   } else return false;

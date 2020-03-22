@@ -35,6 +35,7 @@ Server::Server() :
   _running(false),
   _issrv(false),
   _norootfs(true),
+  _cleanup_inprogress(false),
   _ctimeout(DEF_CTIMEOUT),
   _stimeout(DEF_STIMEOUT),
   _loc_addrinfo(nullptr),
@@ -46,7 +47,7 @@ Server::Server() :
   _nmpwd.clear();
   _lst_socks5.clear();
   _lst_client.clear();
-  _lst_websv.clear();
+  _lst_websrv.clear();
 }
 
 Server::~Server()
@@ -185,10 +186,11 @@ void Server::start() { if (_issrv) start_server(); else start_client(); }
 
 void Server::stop()
 {
-  _mutex_inprogress.lock();
+  while (_cleanup_inprogress) {
+    usleep(200);
+  }
   if (_issrv) stop_server();
   else stop_client();
-  _mutex_inprogress.unlock();
 }
 
 void Server::start_client()
@@ -252,6 +254,9 @@ void Server::stop_client()
     delete _td_cleanup;
     _td_cleanup = nullptr;
   }
+#ifndef USE_SMARTPOINTER
+  for (auto& it : _lst_client) delete it;
+#endif
   _lst_client.clear();
   _loc.close(); // close socket
 }
@@ -269,7 +274,13 @@ void Server::stop_server()
     delete _td_cleanup;
     _td_cleanup = nullptr;
   }
+#ifndef USE_SMARTPOINTER
+  for (auto& it : _lst_socks5) delete it;
+#else
+  for (auto& it : _lst_websrv) delete it;
+#endif
   _lst_socks5.clear();
+  _lst_websrv.clear();
   _ctxwrapper.closecpio();
   _loc.close();
   _soc.close();
@@ -316,8 +327,14 @@ void Server::socks5_initnmpwd(Conf& cfg)
 
 void Server::soc_new_connection(int fd, const char* ip, int port)
 {
+#ifdef USE_SMARTPOINTER
   shared_ptr<SOCKS5> socks5 = make_shared<SOCKS5>();
-  if (socks5) {
+  if (socks5)
+#else
+  SOCKS5* socks5 = new SOCKS5();
+  if (socks5 != nullptr)
+#endif
+  {
     socks5->start(this, fd, ip, port);
     _lst_socks5.push_back(socks5);
     log("[%s:%u] new connection", ip, port);
@@ -326,18 +343,30 @@ void Server::soc_new_connection(int fd, const char* ip, int port)
 
 void Server::web_new_connection(int fd, const char* ip, int port)
 {
-  shared_ptr<WebSv> wsv = make_shared<WebSv>();
-  if (wsv) {
+#ifdef USE_SMARTPOINTER
+  shared_ptr<WebSrv> wsv = make_shared<WebSrv>();
+  if (wsv)
+#else
+  WebSrv* wsv = new WebSrv();
+  if (wsv != nullptr)
+#endif
+  {
     wsv->start(this, fd, ip, port);
-    _lst_websv.push_back(wsv);
+    _lst_websrv.push_back(wsv);
     log("[%s:%u] new connection to web service", ip, port);
   } else error("web_new_connection");
 }
 
 void Server::loc_new_connection(int fd, const char* ip, int port)
 {
+#ifdef USE_SMARTPOINTER
   shared_ptr<Client> cli = make_shared<Client>();
-  if (cli) {
+  if (cli)
+#else
+  Client* cli = new Client();
+  if (cli != nullptr)
+#endif
+  {
     cli->start(this, fd, ip, port);
     _lst_client.push_back(cli);
     log("[%s:%u] new connection", ip, port);
@@ -482,29 +511,53 @@ void Server::signal_cb(ev::sig& w, int revents)
 void Server::cleanup_td(Server* self)
 {
   while (self->_running) {
-    self->_mutex_inprogress.lock();
     unique_lock<mutex> lck(self->_mutex_cleanup);
     self->_cv_cleanup.wait_for(lck, chrono::seconds(self->_stimeout));
+    self->_cleanup_inprogress = true;
     if (self->_issrv) {
-      self->_lst_socks5.remove_if([self](shared_ptr<SOCKS5>& socks5) {
+#ifdef USE_SMARTPOINTER
+      self->_lst_socks5.remove_if([self](shared_ptr<SOCKS5>& socks5)
+#else
+      self->_lst_socks5.remove_if([self](SOCKS5*& socks5)
+#endif
+      {
         if (socks5->done() || (socks5->time() - ::time(nullptr)) > self->_stimeout) {
+#ifndef USE_SMARTPOINTER
+          delete socks5;
+#endif
           return true;
         } else return false;
       });
-      self->_lst_websv.remove_if([self](shared_ptr<WebSv>& websv) {
+#ifdef USE_SMARTPOINTER
+      self->_lst_websrv.remove_if([self](shared_ptr<WebSrv>& websv)
+#else
+      self->_lst_websrv.remove_if([self](WebSrv*& websv)
+#endif
+      {
         if (websv->done() || (websv->time() - ::time(nullptr)) > self->_stimeout) {
+#ifndef USE_SMARTPOINTER
+          delete websv;
+#endif
           return true;
         } else return false;
       });
     } else {
-      self->_lst_client.remove_if([self](shared_ptr<Client>& cli) {
+#ifdef USE_SMARTPOINTER
+      self->_lst_client.remove_if([self](shared_ptr<Client>& cli)
+#else
+      self->_lst_client.remove_if([self](Client*& cli)
+#endif
+      {
         if (cli->done() || (cli->time() - ::time(nullptr)) > self->_stimeout) {
+#ifndef USE_SMARTPOINTER
+          delete cli;
+#endif
           return true;
         } else return false;
       });
     }
+    self->_cleanup_inprogress = false;
 //    log("thread [%x]: _lst_socks5.size():%u, _lst_client.size():%u, _lst_websv.size():%u", ::time(nullptr), self->_lst_socks5.size(), self->_lst_client.size(), self->_lst_websv.size());
-    self->_mutex_inprogress.unlock();
   }
 }
 

@@ -16,16 +16,27 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  * ***/
-#include "websv.h"
+#include "websrv.h"
 #include "server.h"
 #include "utils.h"
 
 using namespace std;
 using namespace utils;
 
-WebSv::WebSv() : _latest(0), _done(false), _server(nullptr), _fd_cli(-1), _ssl(nullptr), _running(false), _port_from(0), _td_web(nullptr), _cv_cleanup(nullptr) {}
+WebSrv::WebSrv()
+: _latest(0),
+  _done(false),
+  _server(nullptr),
+  _fd_cli(-1),
+  _ssl(nullptr),
+  _running(false),
+  _port_from(0),
+  _td_web(nullptr),
+  _cv_cleanup(nullptr) {
+  _ip_from.clear();
+}
 
-WebSv::~WebSv()
+WebSrv::~WebSrv()
 {
   stop();
   if (! _ip_from.empty() && _port_from > 0) {
@@ -33,14 +44,14 @@ WebSv::~WebSv()
   }
 }
 
-void WebSv::start(Server* srv, int fd, const string& ip_from, int port_from)
+void WebSrv::start(Server* srv, int fd, const string& ip_from, int port_from)
 {
-  if (! _running && (_td_web = new thread(websv_td, this, srv, fd, ip_from, port_from)) != nullptr) {
+  if (! _running && (_td_web = new thread(websrv_td, this, srv, fd, ip_from, port_from)) != nullptr) {
     _td_web->detach();
   }
 }
 
-void WebSv::stop()
+void WebSrv::stop()
 {
   if (_running) {
     _done = true;
@@ -65,17 +76,17 @@ void WebSv::stop()
   }
 }
 
-bool WebSv::done()
+bool WebSrv::done()
 {
   return _done;
 }
 
-time_t WebSv::time()
+time_t WebSrv::time()
 {
   return _latest;
 }
 
-bool WebSv::init(Server* srv, int fd, const string& ip_from, int port_from, SSL* ssl)
+bool WebSrv::init(Server* srv, int fd, const string& ip_from, int port_from, SSL* ssl)
 {
   _running = true;
 
@@ -89,7 +100,7 @@ bool WebSv::init(Server* srv, int fd, const string& ip_from, int port_from, SSL*
   return true;
 }
 
-void WebSv::transfer()
+void WebSrv::transfer()
 {
   char buf[MAX(BUFSIZ, 1024)];
   size_t len;
@@ -167,7 +178,7 @@ void WebSv::transfer()
   stop();
 }
 
-void WebSv::websv_td(WebSv* self, Server* srv, int fd, const string& ip_from, int port_from)
+void WebSrv::websrv_td(WebSrv* self, Server* srv, int fd, const string& ip_from, int port_from)
 {
   if (self->init(srv, fd, ip_from, port_from)) {
     self->transfer();

@@ -6,6 +6,7 @@ if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.8)
 endif(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.8)
 
 option(USE_SSTREAM "Use sstream" OFF)
+option(USE_SMARTPOINTER "Use smart pointer (shared_ptr)" OFF)
 
 set(PACKAGE_NAME "jackpot")
 set(PACKAGE_VERSION "1.4")

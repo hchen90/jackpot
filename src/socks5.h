@@ -13,7 +13,7 @@
 
 #include "socks.h"
 #include "tls.h"
-#include "websv.h"
+#include "websrv.h"
 
 #define SOCKS5_VER '\x05'
 #define SOCKS5_AUTHVER '\x01'
@@ -58,7 +58,7 @@
 
 class Server;
 
-class SOCKS5 : public WebSv {
+class SOCKS5 : public WebSrv {
 public:
   SOCKS5();
   ~SOCKS5();

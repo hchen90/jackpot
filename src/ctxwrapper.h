@@ -7,7 +7,6 @@
 #define	_CTXWRAPPER_H_
 
 #include <string>
-#include <memory>
 #include <vector>
 #include <cstring>
 
@@ -15,12 +14,18 @@
 #include "conf.h"
 #include "cpio.h"
 
-struct CtxFile {
+#ifdef USE_SMARTPOINTER
+#include <memory>
+#endif
+
+class CtxFile {
+public:
   CtxFile();
   ~CtxFile();
   CPIOAttr _attr;
   CPIOContent _ctx;
   bool _visible;
+private:
   void clear();
 };
 
@@ -76,7 +81,11 @@ private:
 
   Conf _config;
 
+#ifdef USE_SMARTPOINTER
   std::map<std::string, std::shared_ptr<CtxFile>> _rootfs;
+#else
+  std::map<std::string, CtxFile*> _rootfs;
+#endif
   std::vector<std::string> _indexfl;
   std::vector<std::string> _hidefl;
   std::map<uint16_t, std::string> _schead;

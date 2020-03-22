@@ -28,5 +28,6 @@ typedef unsigned short uint16_t;
 typedef unsigned int uint32_t;
 
 /* #undef USE_SSTREAM */
+/* #undef USE_SMARTPOINTER */
 
 #endif	/* _CONFIG_H_ */

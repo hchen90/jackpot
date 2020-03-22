@@ -21,6 +21,11 @@
 
 using namespace std;
 
+SSLcli::SSLcli()
+: port(0) {
+  ip.clear();
+}
+
 TLS::TLS() : _ctx(nullptr)
 {
   _sslcli.clear();
@@ -70,8 +75,14 @@ SSL* TLS::ssl(const string& ip, int port)
   if (_ctx != nullptr) {
     SSL* s = SSL_new(_ctx);
     if (s != nullptr) {
+#ifdef USE_SMARTPOINTER
       shared_ptr<SSLcli> sc = make_shared<SSLcli>();
-      if (sc) {
+      if (sc)
+#else
+      SSLcli* sc = new SSLcli();
+      if (sc != nullptr)
+#endif
+      {
         sc->port = port;
         sc->ip = ip;
         _sslcli.insert(make_pair(s, sc));
@@ -138,6 +149,9 @@ void TLS::close(SSL* ssl)
   if (ssl != nullptr) {
     auto sc = _sslcli.find(ssl);
     if (sc != _sslcli.end()) {
+#ifndef USE_SMARTPOINTER
+      delete sc->second;
+#endif
       _sslcli.erase(sc);
     }
     SSL_shutdown(ssl);
@@ -154,7 +168,7 @@ void TLS::error(SSL* ssl)
 
       str += sc->second->ip + ":";
 
-      char buf[8];
+      char buf[BUFSIZ]; // more bytes preserved for `ERR_error_string_n()'
       snprintf(buf, sizeof(buf), "%u", sc->second->port);
       
       str += buf;

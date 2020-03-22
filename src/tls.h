@@ -7,15 +7,20 @@
 #define	_TLS_H_
 
 #include <map>
-#include <memory>
 #include <string>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 
+#ifdef USE_SMARTPOINTER
+#include <memory>
+#endif
+
 #include "socks.h"
 #include "config.h"
 
-struct SSLcli {
+class SSLcli {
+public:
+  SSLcli();
   int port;
   std::string ip;
 };
@@ -40,7 +45,11 @@ public:
 private:
   SSL_CTX* _ctx;
 
+#ifdef USE_SMARTPOINTER
   std::map<SSL*, std::shared_ptr<SSLcli>> _sslcli;
+#else
+  std::map<SSL*, SSLcli*> _sslcli;
+#endif
 };
 
 #endif	/* _TLS_H_ */

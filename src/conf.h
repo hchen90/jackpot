@@ -7,8 +7,13 @@
 #define	_CONF_H_
 
 #include <string>
-#include <memory>
 #include <map>
+
+#include "config.h"
+
+#ifdef USE_SMARTPOINTER
+#include <memory>
+#endif
 
 class Conf {
 public:
@@ -24,7 +29,11 @@ public:
   void del(const std::string& sec, const std::string& key);
   void del(const std::string& sec);
 private:
+#ifdef USE_SMARTPOINTER
   std::map<std::string, std::shared_ptr<std::map<std::string, std::string>>> _settings;
+#else
+  std::map<std::string, std::map<std::string, std::string>*> _settings;
+#endif
 };
 
 #endif	/* _CONF_H_ */

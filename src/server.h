@@ -11,7 +11,6 @@
 #include <thread>
 #include <list>
 #include <map>
-#include <memory>
 #include <mutex>
 
 #include <ev++.h>
@@ -20,8 +19,12 @@
 #include "socks.h"
 #include "socks5.h"
 #include "client.h"
-#include "websv.h"
+#include "websrv.h"
 #include "ctxwrapper.h"
+
+#ifdef USE_SMARTPOINTER
+#include <memory>
+#endif
 
 class Server {
 public:
@@ -60,7 +63,7 @@ private:
 
   ///////////////////////////////////////////////
   
-  bool _running, _issrv, _norootfs;
+  bool _running, _issrv, _norootfs, _cleanup_inprogress;
   time_t _ctimeout, _stimeout;
 
   CtxWrapper _ctxwrapper;
@@ -76,9 +79,15 @@ private:
   std::string _serial, _pidfile;
   std::map<std::string, std::string> _nmpwd;
 
+#ifdef USE_SMARTPOINTER
   std::list<std::shared_ptr<SOCKS5>> _lst_socks5;
   std::list<std::shared_ptr<Client>> _lst_client;
-  std::list<std::shared_ptr<WebSv>> _lst_websv;
+  std::list<std::shared_ptr<WebSrv>> _lst_websrv;
+#else
+  std::list<SOCKS5*> _lst_socks5;
+  std::list<Client*> _lst_client;
+  std::list<WebSrv*> _lst_websrv;
+#endif
 
   struct addrinfo* _loc_addrinfo;
 
@@ -88,12 +97,12 @@ private:
   ev::sig* _w_sig;
 
   std::condition_variable _cv_cleanup;
-  std::mutex _mutex_cleanup, _mutex_inprogress;
+  std::mutex _mutex_cleanup;
   std::thread* _td_cleanup;
 
   friend Client;
   friend SOCKS5;
-  friend WebSv;
+  friend WebSrv;
 };
 
 #endif	/* _SERVER_H_ */

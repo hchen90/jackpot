@@ -28,5 +28,6 @@ typedef unsigned short uint16_t;
 typedef unsigned int uint32_t;
 
 #cmakedefine USE_SSTREAM
+#cmakedefine USE_SMARTPOINTER
 
 #endif	/* _CONFIG_H_ */

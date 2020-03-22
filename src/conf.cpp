@@ -19,7 +19,6 @@
 #include <fstream>
 #include <regex>
 
-#include "config.h"
 #include "conf.h"
 
 #define ANONYMOUS_KEY ".anonymous"
@@ -31,8 +30,16 @@ Conf::Conf() { _settings.clear(); }
 Conf::~Conf()
 {
   for (auto& it : _settings) {
-    if (it.second != nullptr) {
+#ifdef USE_SMARTPOINTER
+    if (it.second)
+#else
+    if (it.second != nullptr)
+#endif
+    {
       it.second->clear();
+#ifndef USE_SMARTPOINTER
+      delete it.second;
+#endif
     }
   }
 }
@@ -74,7 +81,19 @@ bool Conf::open(const void* ptr, size_t len)
       session = sm[1];
     } else if (regex_search(line, sm, re_par) && sm.size() == 3) { // search kay-value pair
       if (_settings.find(session) == _settings.end()) {
-        _settings.insert(make_pair(session, make_shared<map<string, string>>()));
+#ifdef USE_SMARTPOINTER
+        auto mp = make_shared<map<string, string>>();
+        if (mp) {
+          mp->clear();
+          _settings.insert(make_pair(session, mp));
+        }
+#else
+        auto mp = new map<string, string>();
+        if (mp != nullptr) {
+          mp->clear();
+          _settings.insert(make_pair(session, mp));
+        }
+#endif
       }
       auto lt = _settings.find(session);
       if (lt != _settings.end() && lt->second != nullptr) {
@@ -117,7 +136,19 @@ bool Conf::open(const string& file)
           session = sm[1];
         } else if (regex_search(line, sm, re_par) && sm.size() == 3) { // search kay = value pair
           if (_settings.find(session) == _settings.end()) {
-            _settings.insert(make_pair(session, make_shared<map<string, string>>()));
+#ifdef USE_SMARTPOINTER
+            auto mp = make_shared<map<string, string>>();
+            if (mp) {
+              mp->clear();
+              _settings.insert(make_pair(session, mp));
+            }
+#else
+            auto mp = new map<string, string>();
+            if (mp != nullptr) {
+              mp->clear();
+              _settings.insert(make_pair(session, mp));
+            }
+#endif
           }
           auto lt = _settings.find(session);
           if (lt != _settings.end() && lt->second) {
@@ -140,7 +171,12 @@ void Conf::update(const string& file)
 
   if (fout.good()) {
     for (auto& it : _settings) {
-      if (it.second && ! it.second->empty()) {
+#ifdef USE_SMARTPOINTER
+      if (it.second && ! it.second->empty())
+#else
+      if (it.second != nullptr && ! it.second->empty())
+#endif
+      {
         if (it.first != ANONYMOUS_KEY) {
           fout << "[" << it.first << "]" << endl;
         }
@@ -156,7 +192,12 @@ void Conf::update(const string& file)
 size_t Conf::get(const string& sec)
 {
   auto it = _settings.find(sec);
-  if (it != _settings.end() && it->second) return it->second->size();
+#ifdef USE_SMARTPOINTER
+  if (it != _settings.end() && it->second)
+#else
+  if (it != _settings.end() && it->second != nullptr)
+#endif
+    return it->second->size();
   return 0;
 }
 
@@ -164,7 +205,12 @@ size_t Conf::get(const string& sec)
 bool Conf::get(const string& sec, size_t index, string& key)
 {
   auto it = _settings.find(sec);
-  if (it != _settings.end() && it->second) {
+#ifdef USE_SMARTPOINTER
+  if (it != _settings.end() && it->second)
+#else
+  if (it != _settings.end() && it->second != nullptr)
+#endif
+  {
     for (auto& lt : *it->second) {
       if (index == 0) {
         key = lt.first;
@@ -181,7 +227,19 @@ bool Conf::get(const string& sec, size_t index, string& key)
 bool Conf::get(const string& sec, const string& key, string& value, bool gt)
 {
   if (! gt && _settings.find(sec) == _settings.end()) {
-    _settings.insert(make_pair(sec, make_shared<map<string, string>>()));
+#ifdef USE_SMARTPOINTER
+    auto mp = make_shared<map<string, string>>();
+    if (mp) {
+      mp->clear();
+      _settings.insert(make_pair(sec, mp));
+    }
+#else
+    auto mp = new map<string, string>();
+    if (mp != nullptr) {
+      mp->clear();
+      _settings.insert(make_pair(sec, mp));
+    }
+#endif
   }
   auto it = _settings.find(sec);
   if (it != _settings.end() && it->second) {
@@ -211,10 +269,17 @@ void Conf::set(const string& sec, const string& key, const string& value)
 void Conf::del(const string& sec, const string& key)
 {
   auto it = _settings.find(sec);
-  if (it != _settings.end() && it->second) {
-    auto lt = it->second->find(key);
-    if (lt != it->second->end()) {
-      it->second->erase(lt);
+  if (it != _settings.end()) {
+#ifdef USE_SMARTPOINTER
+    if (it->second)
+#else
+    if (it->second != nullptr)
+#endif
+    {
+      auto lt = it->second->find(key);
+      if (lt != it->second->end()) {
+        it->second->erase(lt);
+      }
     }
   }
 }
@@ -223,8 +288,16 @@ void Conf::del(const string& sec)
 {
   auto it = _settings.find(sec);
   if (it != _settings.end()) {
-    if (it->second) {
+#ifdef USE_SMARTPOINTER
+    if (it->second)
+#else
+    if (it->second != nullptr)
+#endif
+    {
       it->second->clear();
+#ifndef USE_SMARTPOINTER
+      delete it->second;
+#endif
     }
     _settings.erase(it);
   }

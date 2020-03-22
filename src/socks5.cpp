@@ -24,7 +24,20 @@
 using namespace std;
 using namespace utils;
 
-SOCKS5::SOCKS5() : _fd_tls(-1), _port_from(0), _running(false), _iswebsv(false), _stage(STAGE_INIT), _timeout(DEF_CTIMEOUT), _nmpwd(nullptr), _tls(nullptr), _ssl(nullptr), _td_socks5(nullptr), _cv_cleanup(nullptr) {}
+SOCKS5::SOCKS5()
+: _fd_tls(-1),
+  _port_from(0),
+  _running(false),
+  _iswebsv(false),
+  _stage(STAGE_INIT),
+  _timeout(DEF_CTIMEOUT),
+  _nmpwd(nullptr),
+  _tls(nullptr),
+  _ssl(nullptr),
+  _td_socks5(nullptr),
+  _cv_cleanup(nullptr) {
+  _ip_from.clear();
+}
 
 SOCKS5::~SOCKS5()
 { 
@@ -326,7 +339,7 @@ short SOCKS5::stage_udpp()
 void SOCKS5::socks5_td(SOCKS5* self, Server* srv, int fd, const string& ip_from, int port_from)
 {
   if (self->init(srv, fd, ip_from, port_from)) {
-    if (self->_iswebsv) self->WebSv::transfer();
+    if (self->_iswebsv) self->WebSrv::transfer();
     else self->transfer();
   } else {
     self->stop();
@@ -366,7 +379,7 @@ bool SOCKS5::init(Server* srv, int fd, const string& ip_from, int port_from)
           }
           return true;
         } else {
-          if (WebSv::init(srv, fd, ip_from, port_from, ssl)) {
+          if (WebSrv::init(srv, fd, ip_from, port_from, ssl)) {
             return _iswebsv = true;
           }
         }

@@ -25,7 +25,19 @@ using namespace utils;
 
 /////////////////////////////////////////////////
 
-Client::Client() : _tls(nullptr), _ssl(nullptr), _fd_cli(-1), _done(false), _running(false), _timeout(DEF_CTIMEOUT), _latest(0), _port_from(0), _td_trf(nullptr), _cv_cleanup(nullptr) {}
+Client::Client()
+: _tls(nullptr),
+  _ssl(nullptr),
+  _fd_cli(-1),
+  _done(false),
+  _running(false),
+  _timeout(DEF_CTIMEOUT),
+  _latest(0),
+  _port_from(0),
+  _td_trf(nullptr),
+  _cv_cleanup(nullptr) {
+  _ip_from.clear();
+}
 
 Client::~Client()
 { 

@@ -69,7 +69,10 @@ CPIOContent& CPIOContent::operator= (CPIOContent& obj)
 /////////////////////////////////////////////////
 
 
-CPIO::CPIO(CPIOType cty) : _cpio_type(cty) {}
+CPIO::CPIO(CPIOType cty)
+: _cpio_type(cty) {
+  _cpio_filename.clear();
+}
 
 CPIO::~CPIO() {}
 
