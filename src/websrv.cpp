@@ -24,12 +24,12 @@ using namespace std;
 using namespace utils;
 
 WebSrv::WebSrv()
-: _latest(0),
-  _done(false),
-  _server(nullptr),
+: _server(nullptr),
   _fd_cli(-1),
   _ssl(nullptr),
   _running(false),
+  _done(false),
+  _latest(0),
   _port_from(0),
   _td_web(nullptr),
   _cv_cleanup(nullptr) {

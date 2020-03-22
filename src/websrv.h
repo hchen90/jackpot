@@ -31,9 +31,6 @@ public:
 protected:
   bool init(Server* srv, int fd, const std::string& ip_from, int port_from, SSL* ssl = nullptr);
   void transfer();
-
-  time_t _latest;
-  bool _done;
 private:
   static void websrv_td(WebSrv* self, Server* srv, int fd, const std::string& ip_from, int port_from);
 
@@ -43,7 +40,8 @@ private:
 
   SSL* _ssl;
 
-  bool _running;
+  bool _running, _done;
+  time_t _latest;
 
   std::string _ip_from;
   int _port_from;
