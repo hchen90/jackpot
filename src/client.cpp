@@ -26,23 +26,21 @@ using namespace utils;
 /////////////////////////////////////////////////
 
 Client::Client()
-: _tls(nullptr),
-  _ssl(nullptr),
+: _ssl(nullptr),
   _fd_cli(-1),
   _done(false),
   _running(false),
-  _timeout(DEF_CTIMEOUT),
   _latest(0),
   _port_from(0),
   _td_trf(nullptr),
-  _cv_cleanup(nullptr) {
+  _server(nullptr) {
   _ip_from.clear();
 }
 
 Client::~Client()
 { 
   stop();
-  if (_ssl != nullptr && _tls != nullptr) { _tls->close(_ssl); _ssl = nullptr; }
+  if (_ssl != nullptr && _server != nullptr) { _server->_tls.close(_ssl); _ssl = nullptr; }
   _host.close(_fd_cli);
   _host.close();
   log("[%s:%u] closing connection", _ip_from.c_str(), _port_from);
@@ -60,8 +58,9 @@ void Client::stop()
   if (_running) {
     _done = true;
     _running = false;
-    if (_cv_cleanup != nullptr) {
-      _cv_cleanup->notify_one();
+    if (_server != nullptr) {
+      unique_lock<mutex> lck(_server->_mutex_cleanup);
+      _server->_cv_cleanup.notify_one();
     }
     if (_td_trf != nullptr) {
       delete _td_trf;
@@ -88,7 +87,7 @@ bool Client::read_cli()
 
   if ((len = _host.recv(_fd_cli, buf, sizeof(buf))) > 0) {
     while (len > sent) {
-      int num = _tls->write(_ssl, buf, len);
+      int num = _server->_tls.write(_ssl, buf, len);
       if (num > 0) sent += num;
       else { okay = false; break; }
     }
@@ -104,7 +103,7 @@ bool Client::read_tls()
   char buf[BUFSIZE];
   ssize_t len, sent = 0;
 
-  if ((len = _tls->read(_ssl, buf, sizeof(buf))) > 0) {
+  if ((len = _server->_tls.read(_ssl, buf, sizeof(buf))) > 0) {
     while (len > sent) {
       int num = _host.send(_fd_cli, buf, len);
       if (num > 0) sent += num;
@@ -127,6 +126,8 @@ void Client::client_td(Client* self, Server* srv, int fd, const string& ip_from,
 
 bool Client::init(Server* srv, int fd, const string& ip_from, int port_from)
 {
+  if (srv == nullptr) return false;
+
   _running = true;
 
   SSL* ssl = srv->_tls.ssl(ip_from, port_from);
@@ -134,7 +135,7 @@ bool Client::init(Server* srv, int fd, const string& ip_from, int port_from)
   _fd_cli = fd;
   _ip_from = ip_from;
   _port_from = port_from;
-  _cv_cleanup = &srv->_cv_cleanup;
+  _server = srv;
 
   if (ssl != nullptr && _host.connect(srv->_soc.gethostip().c_str(), srv->_soc.getport()) != -1 && srv->_tls.fd(ssl, _host.socket()) > 0 && srv->_tls.connect(ssl) > 0) {
     fd_set fds;
@@ -150,9 +151,7 @@ bool Client::init(Server* srv, int fd, const string& ip_from, int port_from)
         break;
       default:
         if (srv->loc_accept(ssl)) {
-          _tls = &srv->_tls;
           _ssl = ssl;
-          _timeout = srv->_ctimeout;
           return true;
         }
         break;
@@ -180,7 +179,7 @@ void Client::transfer()
   while (_running) {
     memcpy(&fds, &rfds, sizeof(fds));
 
-    struct timeval tmv = { .tv_sec = _timeout, .tv_usec = 0 };
+    struct timeval tmv = { .tv_sec = _server->_ctimeout, .tv_usec = 0 };
     
     if (select(MAX(fd, _fd_cli) + 1, &fds, nullptr, nullptr, &tmv) > 0) {
       _latest = ::time(nullptr);

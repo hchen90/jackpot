@@ -24,15 +24,14 @@ using namespace std;
 using namespace utils;
 
 WebSrv::WebSrv()
-: _server(nullptr),
+: _done(false),
+  _latest(0),
+  _server(nullptr),
   _fd_cli(-1),
   _ssl(nullptr),
   _running(false),
-  _done(false),
-  _latest(0),
   _port_from(0),
-  _td_web(nullptr),
-  _cv_cleanup(nullptr) {
+  _td_web(nullptr) {
   _ip_from.clear();
 }
 
@@ -65,9 +64,8 @@ void WebSrv::stop()
         _server->_loc.close(_fd_cli); 
         _fd_cli = -1;
       }
-    }
-    if (_cv_cleanup != nullptr) {
-      _cv_cleanup->notify_one();
+      unique_lock<mutex> lck(_server->_mutex_cleanup);
+      _server->_cv_cleanup.notify_one();
     }
     if (_td_web != nullptr) {
       delete _td_web;
@@ -88,6 +86,8 @@ time_t WebSrv::time()
 
 bool WebSrv::init(Server* srv, int fd, const string& ip_from, int port_from, SSL* ssl)
 {
+  if (srv == nullptr) return false;
+
   _running = true;
 
   _server = srv;
@@ -95,7 +95,6 @@ bool WebSrv::init(Server* srv, int fd, const string& ip_from, int port_from, SSL
   _ssl = ssl;
   _ip_from = ip_from;
   _port_from = port_from;
-  _cv_cleanup = &srv->_cv_cleanup;
 
   return true;
 }

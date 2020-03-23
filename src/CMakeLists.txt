@@ -14,7 +14,7 @@ set(PACKAGE_URL "https://github.com/hchen90/jackpot.git")
 set(PACKAGE_BUGREPORT "a.chenxiang.z@gmail.com")
 configure_file(config.h.in config.h @ONLY)
 
-add_definitions("-std=c++11 -Wall -g -rdynamic")
+add_definitions("-std=c++11 -Wall -Werror -rdynamic")
 
 set(DEPLIBS "-pthread")
 

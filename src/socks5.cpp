@@ -28,25 +28,26 @@ SOCKS5::SOCKS5()
 : _fd_tls(-1),
   _port_from(0),
   _running(false),
-  _done(false),
+  _iswebsrv(false),
   _stage(STAGE_INIT),
-  _timeout(DEF_CTIMEOUT),
-  _latest(0),
-  _nmpwd(nullptr),
-  _tls(nullptr),
   _ssl(nullptr),
   _td_socks5(nullptr),
-  _cv_cleanup(nullptr) {
+  _server(nullptr) {
   _ip_from.clear();
 }
 
 SOCKS5::~SOCKS5()
 { 
-  stop();
-  if (_ssl != nullptr && _tls != nullptr) { _tls->close(_ssl); _ssl = nullptr; }
-  _target.close(_fd_tls);
-  _target.close();
-  log("[%s:%u] closing connection", _ip_from.c_str(), _port_from);
+  if (! _iswebsrv) {
+    stop();
+    if (_ssl != nullptr && _server != nullptr) {
+      _server->_tls.close(_ssl);
+      _ssl = nullptr;
+    }
+    _target.close(_fd_tls);
+    _target.close();
+    log("[%s:%u] closing connection", _ip_from.c_str(), _port_from);
+  }
 }
 void SOCKS5::start(Server* srv, int fd, const string& ip_from, int port_from)
 {
@@ -57,11 +58,12 @@ void SOCKS5::start(Server* srv, int fd, const string& ip_from, int port_from)
 
 void SOCKS5::stop()
 {
-  if (_running) {
+  if (_running && ! _iswebsrv) {
     _done = true;
     _running = false;
-    if (_cv_cleanup != nullptr) {
-      _cv_cleanup->notify_one();
+    if (_server != nullptr) {
+      unique_lock<mutex> lck(_server->_mutex_cleanup);
+      _server->_cv_cleanup.notify_one();
     }
     if (_td_socks5 != nullptr) {
       delete _td_socks5;
@@ -70,21 +72,11 @@ void SOCKS5::stop()
   }
 }
 
-bool SOCKS5::done()
-{
-  return _done;
-}
-
-time_t SOCKS5::time()
-{
-  return _latest;
-}
-
 void SOCKS5::timeout()
 {
   if (_running) {
     char rep[STATUS_IPV4_LENGTH] = { SOCKS5_VER, SOCKS5_REP_TTLEXPI, 0, SOCKS5_ATYP_IPV4, 0,0,0,0, 0,0 };
-    _tls->write(_ssl, rep, sizeof(rep));
+    _server->_tls.write(_ssl, rep, sizeof(rep));
   }
 }
 
@@ -94,7 +86,7 @@ bool SOCKS5::read_tls()
   char buf[BUFSIZE];
   ssize_t len, sent = 0;
 
-  if ((len = _tls->read(_ssl, buf, sizeof(buf))) > 0) {
+  if ((len = _server->_tls.read(_ssl, buf, sizeof(buf))) > 0) {
     while (len > sent) {
       int num = _target.send(buf, len);
       if (num > 0) sent += num;
@@ -114,7 +106,7 @@ bool SOCKS5::read_tgt()
 
   if ((len = _target.recv(buf, sizeof(buf))) > 0) {
     while (len > sent) {
-      int num = _tls->write(_ssl, buf, len);
+      int num = _server->_tls.write(_ssl, buf, len);
       if (num > 0) sent += num;
       else { okay = false; break; }
     }
@@ -140,17 +132,17 @@ short SOCKS5::stage_init(void* ptr, size_t len)
         rep[1] = SOCKS5_METHOD_USRPASS;
         ns = STAGE_AUTH;
         break;
-      } else if (buf[i + 2] == SOCKS5_METHOD_NOAUTH && (_nmpwd == nullptr || (_nmpwd != nullptr && _nmpwd->empty()))) {
+      } else if (buf[i + 2] == SOCKS5_METHOD_NOAUTH && _server->_nmpwd.empty()) {
         rep[1] = SOCKS5_METHOD_NOAUTH;
         ns = STAGE_REQU;
         break;
       }
     }
 
-    _tls->write(_ssl, rep, sizeof(rep));
+    _server->_tls.write(_ssl, rep, sizeof(rep));
   } else {
     char rep[2] = { SOCKS5_VER, SOCKS5_METHOD_UNACCEPT };
-    _tls->write(_ssl, rep, sizeof(rep));
+    _server->_tls.write(_ssl, rep, sizeof(rep));
   }
 
   return ns;
@@ -163,26 +155,24 @@ short SOCKS5::stage_auth(void* ptr, size_t len)
 
   if (len > 3 && buf[0] == SOCKS5_AUTHVER) {
     char rep[2] = { SOCKS5_AUTHVER, SOCKS5_ERROR };
+    int nml = buf[1];
+    string nm = string(buf + 2, nml);
+    int pwdl = buf[2 + nml];
+    string pwd = string(buf + 3 + nml, pwdl);
+    auto lt = _server->_nmpwd.find(nm);
 
-    if (_nmpwd != nullptr) {
-      int nml = buf[1];
-      string nm = string(buf + 2, nml);
-      int pwdl = buf[2 + nml];
-      string pwd = string(buf + 3 + nml, pwdl);
-      auto lt = _nmpwd->find(nm);
-      if (lt != _nmpwd->end() && pwd == lt->second) {
-        rep[1] = SOCKS5_SUCCESS;
-        ns = STAGE_REQU;
-      } else {
-        rep[1] = SOCKS5_REP_REFUSED;
-        log("Authentication failed");
-      }
+    if (lt != _server->_nmpwd.end() && pwd == lt->second) {
+      rep[1] = SOCKS5_SUCCESS;
+      ns = STAGE_REQU;
+    } else {
+      rep[1] = SOCKS5_REP_REFUSED;
+      log("[%s:%u] authentication failed", _ip_from.c_str(), _port_from);
     }
 
-    _tls->write(_ssl, rep, sizeof(rep));
+    _server->_tls.write(_ssl, rep, sizeof(rep));
   } else {
     char rep[2] = { SOCKS5_AUTHVER, SOCKS5_ERROR };
-    _tls->write(_ssl, rep, sizeof(rep));
+    _server->_tls.write(_ssl, rep, sizeof(rep));
   }
 
   return ns;
@@ -271,7 +261,7 @@ short SOCKS5::stage_requ(void* ptr, size_t len)
         }
       }
 
-      _tls->write(_ssl, rep, rep_l);
+      _server->_tls.write(_ssl, rep, rep_l);
     }
   }
 
@@ -293,13 +283,13 @@ short SOCKS5::stage_conn()
   while (_running && ! endloop) {
     memcpy(&fds, &rfds, sizeof(fds));
 
-    struct timeval tmv = { .tv_sec = _timeout, .tv_usec = 0 };
+    struct timeval tmv = { .tv_sec = _server->_ctimeout, .tv_usec = 0 };
 
     switch (select(MAX(fd_tgt, _fd_tls) + 1, &fds, nullptr, nullptr, &tmv)) {
       case 0:
         timeout();
         endloop = true;
-        log("[%s:%u] socks5 timeout elapsed (%u)", _ip_from.c_str(), _port_from, _timeout);
+        log("[%s:%u] socks5 timeout elapsed (%u)", _ip_from.c_str(), _port_from, _server->_ctimeout);
         break;
       case -1:
         if (errno == EINTR) continue;
@@ -338,7 +328,8 @@ short SOCKS5::stage_udpp()
 void SOCKS5::socks5_td(SOCKS5* self, Server* srv, int fd, const string& ip_from, int port_from)
 {
   if (self->init(srv, fd, ip_from, port_from)) {
-    self->transfer();
+    if (self->_iswebsrv) self->WebSrv::transfer();
+    else self->transfer();
   } else {
     self->stop();
   }
@@ -346,6 +337,8 @@ void SOCKS5::socks5_td(SOCKS5* self, Server* srv, int fd, const string& ip_from,
 
 bool SOCKS5::init(Server* srv, int fd, const string& ip_from, int port_from)
 {
+  if (srv == nullptr) return false;
+
   _running = true;
 
   SSL* ssl = srv->_tls.ssl(ip_from, port_from);
@@ -353,7 +346,7 @@ bool SOCKS5::init(Server* srv, int fd, const string& ip_from, int port_from)
   _fd_tls = fd;
   _ip_from = ip_from;
   _port_from = port_from;
-  _cv_cleanup = &srv->_cv_cleanup;
+  _server = srv;
 
   if (ssl != nullptr && srv->_tls.fd(ssl, fd) > 0 && srv->_tls.accept(ssl) > 0) {
     fd_set fds;
@@ -369,13 +362,12 @@ bool SOCKS5::init(Server* srv, int fd, const string& ip_from, int port_from)
         break;
       default:
         if (srv->soc_accept(ssl)) {
-          _tls = &srv->_tls;
           _ssl = ssl;
-          _timeout = srv->_ctimeout;
-          if (! srv->_nmpwd.empty()) {
-            _nmpwd = &srv->_nmpwd;
-          }
           return true;
+        } else {
+          if (WebSrv::init(srv, fd, ip_from, port_from, ssl)) {
+            return _iswebsrv = true;
+          }
         }
         break;
     }
@@ -394,7 +386,7 @@ void SOCKS5::transfer()
   char buf[MAX(BUFSIZ, 1024)];
   ssize_t len;
 
-  while ((len = _tls->read(_ssl, buf, sizeof(buf))) > 0) {
+  while ((len = _server->_tls.read(_ssl, buf, sizeof(buf))) > 0) {
     switch (_stage) {
       case STAGE_INIT: _stage = stage_init(buf, len); break;
       case STAGE_AUTH: _stage = stage_auth(buf, len); break;

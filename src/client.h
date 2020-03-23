@@ -35,20 +35,17 @@ private:
   static void client_td(Client* self, Server* srv, int fd, const std::string& ip_from, int port_from);
 
   Socks _host;
-
-  TLS* _tls;
   SSL* _ssl;
 
   int _fd_cli;
-
   bool _done, _running;
-  time_t _timeout, _latest;
+  time_t _latest;
 
   std::string _ip_from;
   int _port_from;
 
   std::thread* _td_trf;
-  std::condition_variable* _cv_cleanup;
+  Server* _server;
 };
 
 #endif	/* _CLIENT_H_ */

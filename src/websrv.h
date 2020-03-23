@@ -31,23 +31,21 @@ public:
 protected:
   bool init(Server* srv, int fd, const std::string& ip_from, int port_from, SSL* ssl = nullptr);
   void transfer();
+
+  bool _done;
+  time_t _latest;
 private:
   static void websrv_td(WebSrv* self, Server* srv, int fd, const std::string& ip_from, int port_from);
 
   Server* _server;
-
   int _fd_cli;
-
   SSL* _ssl;
-
-  bool _running, _done;
-  time_t _latest;
+  bool _running;
 
   std::string _ip_from;
   int _port_from;
 
   std::thread* _td_web;
-  std::condition_variable* _cv_cleanup;
 };
 
 #endif	/* _WEBSRV_H_ */

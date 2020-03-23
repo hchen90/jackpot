@@ -63,7 +63,7 @@ private:
 
   ///////////////////////////////////////////////
   
-  bool _running, _issrv, _norootfs, _cleanup_inprogress;
+  bool _running, _issrv, _norootfs;
   time_t _ctimeout, _stimeout;
 
   CtxWrapper _ctxwrapper;

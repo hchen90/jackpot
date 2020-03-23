@@ -35,7 +35,6 @@ Server::Server() :
   _running(false),
   _issrv(false),
   _norootfs(true),
-  _cleanup_inprogress(false),
   _ctimeout(DEF_CTIMEOUT),
   _stimeout(DEF_STIMEOUT),
   _loc_addrinfo(nullptr),
@@ -184,14 +183,7 @@ bool Server::pidfile(const string& pidfl)
 
 void Server::start() { if (_issrv) start_server(); else start_client(); }
 
-void Server::stop()
-{
-  while (_cleanup_inprogress) {
-    usleep(200);
-  }
-  if (_issrv) stop_server();
-  else stop_client();
-}
+void Server::stop() { if (_issrv) stop_server(); else stop_client(); }
 
 void Server::start_client()
 {
@@ -276,7 +268,6 @@ void Server::stop_server()
   }
 #ifndef USE_SMARTPOINTER
   for (auto& it : _lst_socks5) delete it;
-#else
   for (auto& it : _lst_websrv) delete it;
 #endif
   _lst_socks5.clear();
@@ -409,7 +400,7 @@ bool Server::loc_accept(SSL* ssl)
 
 bool Server::soc_accept(SSL* ssl)
 {
-  char buf[MAX(BUFSIZ, 1024)];
+  char buf[MAX(1024, BUFSIZ)];
   size_t len;
 
   if ((len = _tls.read(ssl, buf, sizeof(buf))) <= 0) return false;
@@ -513,7 +504,6 @@ void Server::cleanup_td(Server* self)
   while (self->_running) {
     unique_lock<mutex> lck(self->_mutex_cleanup);
     self->_cv_cleanup.wait_for(lck, chrono::seconds(self->_stimeout));
-    self->_cleanup_inprogress = true;
     if (self->_issrv) {
 #ifdef USE_SMARTPOINTER
       self->_lst_socks5.remove_if([self](shared_ptr<SOCKS5>& socks5)
@@ -556,7 +546,6 @@ void Server::cleanup_td(Server* self)
         } else return false;
       });
     }
-    self->_cleanup_inprogress = false;
 //    log("thread [%x]: _lst_socks5.size():%u, _lst_client.size():%u, _lst_websv.size():%u", ::time(nullptr), self->_lst_socks5.size(), self->_lst_client.size(), self->_lst_websv.size());
   }
 }
