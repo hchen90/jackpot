@@ -59,7 +59,7 @@ void Client::stop()
     _done = true;
     _running = false;
     if (_server != nullptr) {
-      unique_lock<mutex> lck(_server->_mutex_cleanup);
+      //unique_lock<mutex> lck(_server->_mutex_cleanup);
       _server->_cv_cleanup.notify_one();
     }
     if (_td_trf != nullptr) {

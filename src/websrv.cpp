@@ -64,7 +64,7 @@ void WebSrv::stop()
         _server->_loc.close(_fd_cli); 
         _fd_cli = -1;
       }
-      unique_lock<mutex> lck(_server->_mutex_cleanup);
+      //unique_lock<mutex> lck(_server->_mutex_cleanup);
       _server->_cv_cleanup.notify_one();
     }
     if (_td_web != nullptr) {
