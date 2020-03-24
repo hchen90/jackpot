@@ -1,3 +1,6 @@
+2020-03-24: Hsiang Chen <a.chenxiang.z@gmail.com>
+	* For security reason, replaced regex searching with raw string searching in http request. see `doc/attacks.txt' for details.
+
 2020-03-12: Hsiang Chen <a.chenxiang.z@gmail.com>
 	* Version 1.4 released
 	* Add CPIO feature

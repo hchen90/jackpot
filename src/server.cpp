@@ -16,9 +16,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  * ***/
-#include <fstream>
-#include <regex>
-
 #include <unistd.h>
 #include <execinfo.h>
 
@@ -281,14 +278,13 @@ void Server::stop_server()
 
 bool Server::web_hdrinfo(const void* ptr, size_t len, string& cmd, string& path, string& ver)
 {
-  regex re("([A-Z]+)[\t ]+([^\r\n\t ]+*)[\t ]+([A-Z]+/[0-9]+\\.[0-9]+)");
-  smatch sm;
-  string str((const char*) ptr, MIN(len, 64));
+  string str = string((char*) ptr, len);
+  vector<string> result;
 
-  if (regex_search(str, sm, re) && sm.size() == 4) {
-    cmd = sm[1];
-    path = sm[2];
-    ver = sm[3];
+  if (token(str, " \t\r\n", result) && result.size() >= 3) {
+    cmd = result[0];
+    path = result[1];
+    ver = result[2];
     return true;
   }
 

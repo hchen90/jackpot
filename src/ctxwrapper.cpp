@@ -16,8 +16,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  * ***/
-#include <regex>
-
 #include "ctxwrapper.h"
 #include "utils.h"
 
@@ -363,17 +361,13 @@ bool CtxWrapper::output(string& filename, CPIOAttr& attr, CPIOContent& ctx)
 
 string CtxWrapper::mimetype(const string& filename)
 {
-  regex re_ext("\\.([a-zA-Z_0-9]+)$");
-  smatch sma;
   string ext;
 
   string pathname = filepath(filename);
 
   if (pathname == "/") return "text/html";
 
-  if (regex_search(pathname, sma, re_ext) && sma.size() == 2) {
-    ext = sma[1];
-
+  if (filexts(pathname, ext)) {
     auto it = _mimetype.find(ext);
     if (it != _mimetype.end()) {
       return it->second;

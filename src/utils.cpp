@@ -20,7 +20,6 @@
 #include <cstring>
 #include <iostream>
 #include <mutex>
-#include <regex>
 #include <string>
 
 #include "config.h"
@@ -212,10 +211,38 @@ bool utils::token(const std::string& str, const std::string& delim, std::vector<
 
 std::string utils::chomp(const std::string& str)
 {
-  std::smatch sma;
-  std::regex rec("[\\r\\n]+*([^\\r\\n]+)[\\r\\n]+*");
-  if (std::regex_search(str, sma, rec) && sma.size() == 2) return sma[1];
-  return str;
+  const char* origin = str.c_str();
+  const char* start = origin;
+  size_t len = str.size();
+
+  while (*start == '\r' || *start == '\n' || *start == ' ' || *start == '\t') start++;
+
+  len -= (size_t) (start - origin);
+
+  if (len > 0) {
+    const char* end,* last = start + len;
+
+    for (end = start + len - 1; end > start && (*end == '\r' || *end == '\n' || *end == ' ' || *end == '\t'); end--) {
+      if (*end == '\r' || *end == '\n' || *end == ' ' || *end == '\t') last = end;
+    }
+
+    len = last - start;
+  } else return str;
+
+  return std::string(start, len);
+}
+
+bool utils::filexts(const std::string& str, std::string& exts)
+{
+  const char* end = str.c_str() + str.size();
+  char* dot = strrchr((char*) str.c_str(), '.');
+
+  if (dot != nullptr && *dot == '.' && dot + 1 < end) {
+    exts = dot + 1;
+    return true;
+  }
+
+  return false;
 }
 
 /*end*/
