@@ -156,13 +156,14 @@ void utils::dump(const void* ptr, size_t len)
 
 bool utils::token(const std::string& str, const std::string& delim, std::vector<std::string>& result)
 {
-  char* sss = new char[str.size() + 1];
+  size_t len = str.size();
+  char* sss = new char[len + 1];
 
   if (sss == nullptr) return false;
 
-  memcpy(sss, str.c_str(), str.size());
+  memcpy(sss, str.data(), len);
 
-  sss[str.size()] = 0;
+  sss[len] = 0;
 
   char* saveptr = nullptr;
   const char* dlm = delim.c_str();
