@@ -22,7 +22,8 @@
 using namespace std;
 
 SSLcli::SSLcli()
-: port(0) {
+: port(0),
+  fd(-1) {
   ip.clear();
 }
 
@@ -98,7 +99,13 @@ int TLS::fd(SSL* ssl, int fd)
   if (ssl != nullptr) {
     int ret = SSL_set_fd(ssl, fd);
     if (ret <= 0) error(ssl);
-    else return ret;
+    else {
+      auto lt = _sslcli.find(ssl);
+      if (lt != _sslcli.end()) {
+        lt->second->fd = fd;
+      }
+      return ret;
+    }
   }
   return -1;
 }
@@ -182,6 +189,16 @@ void TLS::error(SSL* ssl)
   }
 
   ERR_print_errors_fp(stderr);
+}
+
+int TLS::setnonblock(SSL* ssl, bool nb)
+{
+  auto lt = _sslcli.find(ssl);
+  if (lt != _sslcli.end() && lt->second->fd > 0) {
+    return Socks::setnonblock(lt->second->fd, nb);
+  }
+
+  return -1;
 }
 
 /*end*/

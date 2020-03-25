@@ -1,3 +1,5 @@
+*~
+*.bak
 CMakeCache.txt
 CMakeFiles/
 Makefile
@@ -13,7 +15,5 @@ src/CMakeFiles/
 src/Makefile
 src/jackpot
 src/tags
-src/sample.key
-src/sample.crt
 src/cmake_install.cmake
 src/install_manifest.txt

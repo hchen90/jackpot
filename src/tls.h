@@ -23,6 +23,7 @@ public:
   SSLcli();
   int port;
   std::string ip;
+  int fd;
 };
 
 class TLS {
@@ -42,6 +43,7 @@ public:
   int write(SSL* ssl, void* buf, int num);
   void close(SSL* ssl);
   void error(SSL* ssl = nullptr);
+  int setnonblock(SSL* ssl, bool nb = true);
 private:
   SSL_CTX* _ctx;
 

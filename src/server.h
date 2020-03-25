@@ -15,6 +15,7 @@
 
 #include <ev++.h>
 
+#include "tls.h"
 #include "conf.h"
 #include "socks.h"
 #include "socks5.h"
@@ -39,6 +40,8 @@ private:
   bool pidfile(const std::string& pidfl);
 
   bool web_hdrinfo(const void* ptr, size_t len, std::string& cmd, std::string& path, std::string& ver);
+  //bool web_hdrinfo(int fd, std::string& cmd, std::string& path, std::string& ver);
+  //bool web_hdrinfo(SSL* ssl, std::string& cmd, std::string& path, std::string& ver);
   void socks5_initnmpwd(Conf& cfg);
 
   void start_client();

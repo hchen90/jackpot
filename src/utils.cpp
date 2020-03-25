@@ -20,14 +20,11 @@
 #include <cstring>
 #include <iostream>
 #include <mutex>
+#include <regex>
+#include <sstream>
 #include <string>
 
 #include "config.h"
-
-#ifdef USE_SSTREAM
-#include <sstream>
-#endif
-
 #include "utils.h"
 
 
@@ -48,39 +45,16 @@ void utils::log(const std::string& fmt, va_list ap)
   char buf[BUFSIZ];
 
   if (vsnprintf(buf, sizeof(buf), fmt.c_str(), ap) > 0) {
-#ifdef USE_SSTREAM
     std::ostringstream oss;
-#else
-    std::string str;
-#endif
+
     if (_log_disp_timestamp) {
-#ifdef USE_SSTREAM
       oss << "[" << (uint32_t) time(nullptr) << "] " << buf;
-#else
-      str = "[";
-
-      char suf[16];
-
-      snprintf(suf, sizeof(suf), "%u", (uint32_t) time(nullptr));
-
-      str += suf;
-      str += "] ";
-      str += buf;
-#endif
     } else {
-#ifdef USE_SSTREAM
       oss << buf;
-#else
-      str = buf;
-#endif
     }
 
     _std_log_mutex.lock();
-#ifdef USE_SSTREAM
     std::cout << "\r" << oss.str() << std::endl;
-#else
-    std::cout << "\r" << str << std::endl;
-#endif
     _std_log_mutex.unlock();
   }
 }
@@ -211,34 +185,19 @@ bool utils::token(const std::string& str, const std::string& delim, std::vector<
 
 std::string utils::chomp(const std::string& str)
 {
-  const char* origin = str.c_str();
-  const char* start = origin;
-  size_t len = str.size();
-
-  while (*start == '\r' || *start == '\n' || *start == ' ' || *start == '\t') start++;
-
-  len -= (size_t) (start - origin);
-
-  if (len > 0) {
-    const char* end,* last = start + len;
-
-    for (end = start + len - 1; end > start && (*end == '\r' || *end == '\n' || *end == ' ' || *end == '\t'); end--) {
-      if (*end == '\r' || *end == '\n' || *end == ' ' || *end == '\t') last = end;
-    }
-
-    len = last - start;
-  } else return str;
-
-  return std::string(start, len);
+  std::smatch sma;
+  std::regex rec("[\\r\\n]+*([^\\r\\n]+)[\\r\\n]+*");
+  if (std::regex_search(str, sma, rec) && sma.size() == 2) return sma[1];
+  return str;
 }
 
 bool utils::filexts(const std::string& str, std::string& exts)
 {
-  const char* end = str.c_str() + str.size();
-  char* dot = strrchr((char*) str.c_str(), '.');
+  std::regex re_ext("\\.([a-zA-Z_0-9]+)$");
+  std::smatch sma;
 
-  if (dot != nullptr && *dot == '.' && dot + 1 < end) {
-    exts = dot + 1;
+  if (std::regex_search(str, sma, re_ext) && sma.size() == 2) {
+    exts = sma[1];
     return true;
   }
 

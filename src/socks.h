@@ -53,12 +53,12 @@ public:
   int getport() const;
 
   int setnonblock(bool nb = true);
-  int setnonblock(int soc, bool nb = true);
+  static int setnonblock(int soc, bool nb = true);
   int setlinger(int lg);
 
-  int shutdown(int& soc, int how);
+  static int shutdown(int& soc, int how);
   int shutdown(int how);
-  int close(int& soc);
+  static int close(int& soc);
   int close();
 
   int resolve(const char* hostip, int port, struct addrinfo** addr); // call this function with hostip = nullptr to free resource

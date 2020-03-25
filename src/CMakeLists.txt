@@ -5,7 +5,6 @@ if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.8)
   message(FATAL_ERROR "GCC version is too old, 4.8 or higher required")
 endif(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.8)
 
-option(USE_SSTREAM "Use sstream" OFF)
 option(USE_SMARTPOINTER "Use smart pointer (shared_ptr)" OFF)
 
 set(PACKAGE_NAME "jackpot")

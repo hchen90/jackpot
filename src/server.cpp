@@ -374,18 +374,18 @@ bool Server::loc_accept(SSL* ssl)
   snprintf(buf, sizeof(buf), "%u\r\n", _soc.getport());
 
   req += buf;
-  req += "Content-Type: text/html\r\nConnection: keep-alive\r\nContent-Language: en\r\n\r\n";
+  req += "Content-Type: text/html\r\nConnection: keep-alive\r\n\r\n";
 
   if (_tls.write(ssl, (void*) req.data(), req.size()) <= 0) {
     _tls.error(ssl);
     return false;
   }
 
-  size_t len;
+  int len;
 
   if ((len = _tls.read(ssl, buf, sizeof(buf))) <= 0) return false;
 
-  if (len >= sizeof(buf)) log("Response is too long");
+  if (len >= (int) sizeof(buf)) log("Response is too long");
 
   string str = string((const char*) buf, MIN(len, 16));
 
@@ -397,11 +397,11 @@ bool Server::loc_accept(SSL* ssl)
 bool Server::soc_accept(SSL* ssl)
 {
   char buf[MAX(1024, BUFSIZ)];
-  size_t len;
+  int len;
 
   if ((len = _tls.read(ssl, buf, sizeof(buf))) <= 0) return false;
 
-  if (len >= sizeof(buf)) log("Request is too long");
+  if (len >= (int) sizeof(buf)) log("Request is too long");
 
   string cmd, path, ver;
 

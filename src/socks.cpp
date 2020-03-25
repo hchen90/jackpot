@@ -324,14 +324,13 @@ int Socks::shutdown(int how)
 
 int Socks::close()
 {
-  shutdown(SHUT_RDWR);
   return close(socket_fd);
 }
 
 int Socks::close(int& soc)
 {
   if (soc != -1) {
-    shutdown(soc, SHUT_RDWR);
+    ::shutdown(soc, SHUT_RDWR);
     int n = ::close(soc);
     soc = -1;
     return n;
