@@ -102,7 +102,6 @@ bool WebSrv::init(Server* srv, int fd, const string& ip_from, int port_from, SSL
 void WebSrv::transfer()
 {
   char buf[MAX(BUFSIZ, 1024)];
-  size_t len;
 
   string cmd, path, ver;
   
@@ -126,6 +125,8 @@ void WebSrv::transfer()
     }
 
     if (! end) {
+      int len;
+
       if (_ssl != nullptr) { // HTTPS
         if ((len = _server->_tls.read(_ssl, buf, sizeof(buf))) > 0) {
           if (_server->web_hdrinfo(buf, len, cmd, path, ver)) {
