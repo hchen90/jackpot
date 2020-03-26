@@ -59,8 +59,8 @@ bool Conf::open(const void* ptr, size_t len)
 
   regex re_bla("[\t ]+*");
   regex re_cmt("[\t ]+*;.*");
-  regex re_sec("\\[([A-Za-z_0-9]+)\\]");
-  regex re_par("[\t ]+*([A-Za-z_0-9]+)[\t ]+*=[\t ]+*([^\t ]+)");
+  regex re_sec("\\[([^\r\n]+)\\]");
+  regex re_par("[\t ]+*([^\r\n\t ]+)[\t ]+*=[\t ]+*([^\r\n]+)");
 
   string session = ANONYMOUS_KEY;
 
@@ -123,8 +123,8 @@ bool Conf::open(const string& file)
     smatch sm;
     regex re_bla("[\t ]+*");
     regex re_cmt("[\t ]+*;.*");
-    regex re_sec("\\[([A-Za-z_0-9]+)\\]");
-    regex re_par("[\t ]+*([A-Za-z_0-9]+)[\t ]+*=[\t ]+*([^\t ]+)");
+    regex re_sec("\\[([^\r\n]+)\\]");
+    regex re_par("[\t ]+*([^\r\n\t ]+)[\t ]+*=[\t ]+*([^\r\n]+)");
 
     _settings.clear();
 

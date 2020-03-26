@@ -534,8 +534,7 @@ void CtxWrapper::updateinfo()
         for (size_t idx = 0; idx < len; idx++) {
           if (_config.get("mime", idx, key) && _config.get("mime", key, value)) {
             vector<string> result;
-
-            if (token(value, ";,", result)) {
+            if (token(value, ";, ", result)) {
               for (auto& lt : result) {
                 _mimetype.insert(make_pair(lt, key));
               }

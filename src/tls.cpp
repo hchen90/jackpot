@@ -168,7 +168,8 @@ void TLS::close(SSL* ssl)
 
 void TLS::error(SSL* ssl)
 {
-  if (ssl != nullptr) {
+  auto err = ERR_get_error();
+  if (ssl != nullptr && err != 0) {
     auto sc = _sslcli.find(ssl);
     if (sc != _sslcli.end()) {
       string str = "[";
@@ -181,7 +182,7 @@ void TLS::error(SSL* ssl)
       str += buf;
       str += "]";
 
-      ERR_error_string_n(ERR_get_error(), buf, sizeof(buf));
+      ERR_error_string_n(err, buf, sizeof(buf));
 
       utils::log("%s %s", str.c_str(), buf);
       return;
