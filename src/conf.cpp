@@ -21,7 +21,11 @@
 
 #include "conf.h"
 
-#define ANONYMOUS_KEY ".anonymous"
+#define ANONYMOUS_SECTION ".anonymous"
+#define REGEX_BLANK "[\t ]+*"
+#define REGEX_COMMENT REGEX_BLANK ";.*"
+#define REGEX_SECTION REGEX_BLANK "\\[([^\r\n\t ]+)\\]" REGEX_BLANK
+#define REGEX_PAIR REGEX_BLANK "([^\r\n\t ]+)" REGEX_BLANK "=" REGEX_BLANK "([^\r\n]+)"
 
 using namespace std;
 
@@ -57,12 +61,12 @@ bool Conf::open(const void* ptr, size_t len)
   
   smatch sm;
 
-  regex re_bla("[\t ]+*");
-  regex re_cmt("[\t ]+*;.*");
-  regex re_sec("\\[([^\r\n]+)\\]");
-  regex re_par("[\t ]+*([^\r\n\t ]+)[\t ]+*=[\t ]+*([^\r\n]+)");
+  regex re_bla(REGEX_BLANK);
+  regex re_cmt(REGEX_COMMENT);
+  regex re_sec(REGEX_SECTION);
+  regex re_par(REGEX_PAIR);
 
-  string session = ANONYMOUS_KEY;
+  string session = ANONYMOUS_SECTION;
 
   _settings.clear();
 
@@ -119,12 +123,14 @@ bool Conf::open(const string& file)
   ifstream fin(file.c_str(), ios::in);
 
   if (fin.good()) {
-    string line, session = ANONYMOUS_KEY;
+    string line, session = ANONYMOUS_SECTION;
+    
     smatch sm;
-    regex re_bla("[\t ]+*");
-    regex re_cmt("[\t ]+*;.*");
-    regex re_sec("\\[([^\r\n]+)\\]");
-    regex re_par("[\t ]+*([^\r\n\t ]+)[\t ]+*=[\t ]+*([^\r\n]+)");
+
+    regex re_bla(REGEX_BLANK);
+    regex re_cmt(REGEX_COMMENT);
+    regex re_sec(REGEX_SECTION);
+    regex re_par(REGEX_PAIR);
 
     _settings.clear();
 
@@ -177,7 +183,7 @@ void Conf::update(const string& file)
       if (it.second != nullptr && ! it.second->empty())
 #endif
       {
-        if (it.first != ANONYMOUS_KEY) {
+        if (it.first != ANONYMOUS_SECTION) {
           fout << "[" << it.first << "]" << endl;
         }
         for (auto& lt : *it.second) {
