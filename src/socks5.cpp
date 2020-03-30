@@ -383,7 +383,7 @@ bool SOCKS5::init(Server* srv, int fd, const string& ip_from, int port_from)
 
 void SOCKS5::transfer()
 {
-  char buf[MAX(BUFSIZ, 1024)];
+  char buf[BUFSIZE];
   ssize_t len;
 
   while ((len = _server->_tls.read(_ssl, buf, sizeof(buf))) > 0) {

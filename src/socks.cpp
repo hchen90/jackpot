@@ -78,7 +78,7 @@ int Socks::bind(const struct sockaddr* addr, socklen_t addr_len, int tags, bool 
     int opt = 1;
 
     if (tags & 0x10) setsockopt(SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-    if (tags & 0x20) setsockopt(SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    if (tags & 0x20) setsockopt(SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt));
   }
 
   if (bd) return ::bind(socket_fd, addr, addr_len);
@@ -94,8 +94,8 @@ int Socks::bind(const struct sockaddr* addr, socklen_t addr_len, int tags, bool 
 
   if (ret == -1) {
     if (errno == EINPROGRESS) {
-      fd_set fds; FD_ZERO(&fds); FD_SET(socket_fd, &fds);
       for (int i = 0; i < 4; i++) {
+        fd_set fds; FD_ZERO(&fds); FD_SET(socket_fd, &fds);
         struct timeval tmv = { .tv_sec = 2, .tv_usec = 0 };
         if ((ret = select(socket_fd + 1, nullptr, &fds, nullptr, &tmv)) < 0 && errno != EINTR) {
           break;

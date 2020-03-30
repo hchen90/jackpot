@@ -7,7 +7,7 @@
 #define	_CONFIG_H_
 
 #define PACKAGE_NAME "jackpot"
-#define PACKAGE_VERSION "1.4"
+#define PACKAGE_VERSION "1.4.1"
 #define PACKAGE_URL "https://github.com/hchen90/jackpot.git"
 #define PACKAGE_BUGREPORT "a.chenxiang.z@gmail.com"
 
@@ -19,7 +19,7 @@
   #define MIN(s1,s2) (s1<s2?s1:s2)
 #endif
 
-#define BUFSIZE 256
+#define BUFSIZE 1024
 #define DEF_CTIMEOUT 20
 #define DEF_STIMEOUT 108000
 

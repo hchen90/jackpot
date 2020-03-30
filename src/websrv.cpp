@@ -101,7 +101,7 @@ bool WebSrv::init(Server* srv, int fd, const string& ip_from, int port_from, SSL
 
 void WebSrv::transfer()
 {
-  char buf[MAX(BUFSIZ, 1024)];
+  char buf[BUFSIZE];
 
   string cmd, path, ver;
   

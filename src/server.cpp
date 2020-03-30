@@ -369,7 +369,7 @@ bool Server::loc_accept(SSL* ssl)
   req += _serial + " HTTP/1.1\r\nHost: ";
   req += _soc.gethostip() + ":";
 
-  char buf[MAX(BUFSIZ, 1024)];
+  char buf[MAX(BUFSIZ, BUFSIZE)];
 
   snprintf(buf, sizeof(buf), "%u\r\n", _soc.getport());
 
@@ -396,7 +396,7 @@ bool Server::loc_accept(SSL* ssl)
 
 bool Server::soc_accept(SSL* ssl)
 {
-  char buf[MAX(1024, BUFSIZ)];
+  char buf[MAX(BUFSIZ, BUFSIZE)];
   int len;
 
   if ((len = _tls.read(ssl, buf, sizeof(buf))) <= 0) return false;
