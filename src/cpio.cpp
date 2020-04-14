@@ -450,16 +450,16 @@ bool CPIO::dump_odc(ofstream& outs, CPIOAttr& attr, string& filename, CPIOConten
 {
   // attr.c_attr.c_odc
   memcpy(attr.c_attr.c_odc.c_magic, C_MAGIC, sizeof(attr.c_attr.c_odc.c_magic));
-  sprintf((char*) attr.c_attr.c_odc.c_dev, "%06o", (uint32_t) attr.c_stat.st_dev);
-  sprintf((char*) attr.c_attr.c_odc.c_ino, "%06o", (uint32_t) attr.c_stat.st_ino);
-  sprintf((char*) attr.c_attr.c_odc.c_mode, "%06o", (uint32_t) attr.c_stat.st_mode);
-  sprintf((char*) attr.c_attr.c_odc.c_uid, "%06o", (uint32_t) attr.c_stat.st_uid);
-  sprintf((char*) attr.c_attr.c_odc.c_gid, "%06o", (uint32_t) attr.c_stat.st_gid);
-  sprintf((char*) attr.c_attr.c_odc.c_nlink, "%06o", (uint32_t) attr.c_stat.st_nlink);
-  sprintf((char*) attr.c_attr.c_odc.c_rdev, "%06o", (uint32_t) attr.c_stat.st_rdev);
-  sprintf((char*) attr.c_attr.c_odc.c_mtime, "%011o", (uint32_t) attr.c_stat.st_mtim.tv_sec);
-  sprintf((char*) attr.c_attr.c_odc.c_namesize, "%06o", (uint32_t) filename.size() + 1);
-  sprintf((char*) attr.c_attr.c_odc.c_filesize, "%011o", (uint32_t) attr.c_stat.st_size);
+  to_oct((uint32_t) attr.c_stat.st_dev, 6, (uint8_t*) attr.c_attr.c_odc.c_dev);
+  to_oct((uint32_t) attr.c_stat.st_ino, 6, (uint8_t*) attr.c_attr.c_odc.c_ino);
+  to_oct((uint32_t) attr.c_stat.st_mode, 6, (uint8_t*) attr.c_attr.c_odc.c_mode);
+  to_oct((uint32_t) attr.c_stat.st_uid, 6, (uint8_t*) attr.c_attr.c_odc.c_uid);
+  to_oct((uint32_t) attr.c_stat.st_gid, 6, (uint8_t*) attr.c_attr.c_odc.c_gid);
+  to_oct((uint32_t) attr.c_stat.st_nlink, 6, (uint8_t*) attr.c_attr.c_odc.c_nlink);
+  to_oct((uint32_t) attr.c_stat.st_rdev, 6, (uint8_t*) attr.c_attr.c_odc.c_rdev);
+  to_oct((uint32_t) attr.c_stat.st_mtim.tv_sec, 11, (uint8_t*) attr.c_attr.c_odc.c_mtime);
+  to_oct((uint32_t) filename.size() + 1, 6, (uint8_t*) attr.c_attr.c_odc.c_namesize);
+  to_oct((uint32_t) attr.c_stat.st_size, 11, (uint8_t*) attr.c_attr.c_odc.c_filesize);
   
   auto sz = padding_size(attr);
 
@@ -489,19 +489,19 @@ bool CPIO::dump_crc(ofstream& outs, CPIOAttr& attr, string& filename, CPIOConten
 {
   // attr.c_attr.c_crc
   memcpy(attr.c_attr.c_crc.c_magic, C_MAGICNC, sizeof(attr.c_attr.c_crc.c_magic));
-  sprintf((char*) attr.c_attr.c_crc.c_ino, "%08X", (uint32_t) attr.c_stat.st_ino);
-  sprintf((char*) attr.c_attr.c_crc.c_mode, "%08X", (uint32_t) attr.c_stat.st_mode);
-  sprintf((char*) attr.c_attr.c_crc.c_uid, "%08X", (uint32_t) attr.c_stat.st_uid);
-  sprintf((char*) attr.c_attr.c_crc.c_gid, "%08X", (uint32_t) attr.c_stat.st_gid);
-  sprintf((char*) attr.c_attr.c_crc.c_nlink, "%08X", (uint32_t) attr.c_stat.st_nlink);
-  sprintf((char*) attr.c_attr.c_crc.c_mtime, "%08X", (uint32_t) attr.c_stat.st_mtim.tv_sec);
-  sprintf((char*) attr.c_attr.c_crc.c_filesize, "%08X", (uint32_t) attr.c_stat.st_size);
-  sprintf((char*) attr.c_attr.c_crc.c_dev_maj, "%08X", (uint32_t) major(attr.c_stat.st_dev));
-  sprintf((char*) attr.c_attr.c_crc.c_dev_min, "%08X", (uint32_t) minor(attr.c_stat.st_dev));
-  sprintf((char*) attr.c_attr.c_crc.c_rdev_maj, "%08X", (uint32_t) major(attr.c_stat.st_rdev));
-  sprintf((char*) attr.c_attr.c_crc.c_rdev_min, "%08X", (uint32_t) minor(attr.c_stat.st_rdev));
-  sprintf((char*) attr.c_attr.c_crc.c_namesize, "%08X", (uint32_t) filename.size() + 1);
-  sprintf((char*) attr.c_attr.c_crc.c_checksum, "%08x", 0);
+  to_hex((uint32_t) attr.c_stat.st_ino, 8, (uint8_t*) attr.c_attr.c_crc.c_ino);
+  to_hex((uint32_t) attr.c_stat.st_mode, 8, (uint8_t*) attr.c_attr.c_crc.c_mode);
+  to_hex((uint32_t) attr.c_stat.st_uid, 8, (uint8_t*) attr.c_attr.c_crc.c_uid);
+  to_hex((uint32_t) attr.c_stat.st_gid, 8, (uint8_t*) attr.c_attr.c_crc.c_gid);
+  to_hex((uint32_t) attr.c_stat.st_nlink, 8, (uint8_t*) attr.c_attr.c_crc.c_nlink);
+  to_hex((uint32_t) attr.c_stat.st_mtim.tv_sec, 8, (uint8_t*) attr.c_attr.c_crc.c_mtime);
+  to_hex((uint32_t) attr.c_stat.st_size, 8, (uint8_t*) attr.c_attr.c_crc.c_filesize);
+  to_hex((uint32_t) major(attr.c_stat.st_dev), 8, (uint8_t*) attr.c_attr.c_crc.c_dev_maj);
+  to_hex((uint32_t) minor(attr.c_stat.st_dev), 8, (uint8_t*) attr.c_attr.c_crc.c_dev_min);
+  to_hex((uint32_t) major(attr.c_stat.st_rdev), 8, (uint8_t*) attr.c_attr.c_crc.c_rdev_maj);
+  to_hex((uint32_t) minor(attr.c_stat.st_rdev), 8, (uint8_t*) attr.c_attr.c_crc.c_rdev_min);
+  to_hex((uint32_t) filename.size() + 1, 8, (uint8_t*) attr.c_attr.c_crc.c_namesize);
+  to_hex((uint32_t) 0, 8, (uint8_t*) attr.c_attr.c_crc.c_checksum);
 
   auto sz = padding_size(attr);
 
@@ -546,6 +546,27 @@ uint32_t CPIO::from_oct(const uint8_t* oct, uint8_t len)
   uint32_t raw = 0;
   for (uint8_t i = 0; i < len && oct[i] >= '0' && oct[i] <= '7'; i++) raw = raw * 8 + (oct[i] - '0');
   return raw;
+}
+
+void CPIO::to_hex(uint32_t val, int digits, uint8_t* buf)
+{
+  for ( ; digits > 0 && val != 0; val >>= 4) {
+    uint8_t v = val & 15;
+
+    if (v > 10) {
+      buf[--digits] = 'A' + (v - 10);
+    } else {
+      buf[--digits] = '0' + v;
+    }
+  }
+
+  while (digits > 0) buf[--digits] = '0';
+}
+
+void CPIO::to_oct(uint32_t val, int digits, uint8_t* buf)
+{
+  for ( ; digits > 0 && val != 0; val >>= 3) buf[--digits] = '0' + (uint8_t) (val & 7);
+  while (digits > 0) buf[--digits] = '0';
 }
 
 pair<uint32_t, uint32_t> CPIO::padding_size(CPIOAttr& attr)

@@ -135,6 +135,8 @@ private:
 
   uint32_t from_hex(const uint8_t* hex, uint8_t len);
   uint32_t from_oct(const uint8_t* oct, uint8_t len);
+  void to_hex(uint32_t val, int digits, uint8_t* buf);
+  void to_oct(uint32_t val, int digits, uint8_t* buf);
   std::pair<uint32_t, uint32_t> padding_size(CPIOAttr& attr);
 
   std::string _cpio_filename;
