@@ -11,9 +11,12 @@ set(PACKAGE_NAME "jackpot")
 set(PACKAGE_VERSION "1.4.1")
 set(PACKAGE_URL "https://github.com/hchen90/jackpot.git")
 set(PACKAGE_BUGREPORT "a.chenxiang.z@gmail.com")
+set(IFCONFIG_PATH "/usr/bin/ifconfig")
+set(IPROUTE_PATH "/usr/bin/ip")
+set(ROUTE_PATH "/usr/bin/route")
 configure_file(config.h.in config.h @ONLY)
 
-add_definitions("-std=c++11 -Wall -Werror -rdynamic -g")
+add_definitions("-std=c++11 -Wall -rdynamic -g")
 
 set(DEPLIBS "-pthread")
 
