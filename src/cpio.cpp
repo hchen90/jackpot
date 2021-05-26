@@ -19,7 +19,10 @@
 #include <cstring>
 
 #include <sys/types.h>
-//#include <sys/sysmacros.h>
+
+#ifdef __linux__
+#include <sys/sysmacros.h>
+#endif
 
 #include "cpio.h"
 #include "utils.h"
