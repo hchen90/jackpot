@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.com/hchen90/jackpot.svg?branch=master)](https://travis-ci.com/hchen90/jackpot)
+
 Visit https://sourceforge.net/p/jackpot-proxy for more details.
 
 ------------------------------------------------------------
