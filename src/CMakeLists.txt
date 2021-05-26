@@ -16,7 +16,13 @@ set(IPROUTE_PATH "/usr/bin/ip")
 set(ROUTE_PATH "/usr/bin/route")
 configure_file(config.h.in config.h @ONLY)
 
-add_definitions("-std=c++11 -Wall -rdynamic -g")
+include_directories("/usr/local/include")
+
+if(${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
+  add_definitions("-std=c++11 -Wall")
+else()
+  add_definitions("-std=c++11 -Wall -rdynamic")
+endif()
 
 set(DEPLIBS "-pthread")
 
@@ -35,10 +41,15 @@ check_library(ev FATAL_ERROR)
 check_library(ssl FATAL_ERROR)
 check_library(crypto FATAL_ERROR)
 
+if(NOT ${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+  check_library(execinfo FATAL_ERROR)
+endif()
+
 file(GLOB SRCFILES "*.cpp")
 file(GLOB HDRFILES "*.h")
 add_executable(jackpot ${SRCFILES} ${HDRFILES})
 target_link_libraries(jackpot ${DEPLIBS})
+target_link_directories(jackpot PUBLIC "/usr/local/lib")
 
 set(CMAKE_INSTALL_BINDIR "/usr/bin")
 install(TARGETS jackpot DESTINATION ${CMAKE_INSTALL_BINDIR})

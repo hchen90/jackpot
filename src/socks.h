@@ -11,6 +11,7 @@
 #include <sys/types.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <netinet/in.h>
 
 #include <string>
 

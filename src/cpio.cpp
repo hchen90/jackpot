@@ -19,7 +19,7 @@
 #include <cstring>
 
 #include <sys/types.h>
-#include <sys/sysmacros.h>
+//#include <sys/sysmacros.h>
 
 #include "cpio.h"
 #include "utils.h"
