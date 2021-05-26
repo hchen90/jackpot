@@ -8,14 +8,14 @@ script:
   - src/jackpot -v
 env:
   - COMPILER_NAME=gcc CXX=g++-5 CC=gcc-5
-before_install:
-  - sudo apt-get -y install libev-dev openssl-dev
 addons:
   apt:
     sources:
       - ubuntu-toolchain-r-test
       - llvm-toolchain-precise-3.8
     packages:
+      - libev-dev
+      - libssl-dev
       - gcc-5
       - g++-5
       - clang-3.8
