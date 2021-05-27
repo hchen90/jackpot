@@ -9,6 +9,7 @@
 #include <openssl/ssl.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/select.h>
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <netinet/in.h>
