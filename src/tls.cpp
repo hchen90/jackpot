@@ -64,6 +64,10 @@ bool TLS::init(const string& key, const string& cert)
       ERR_print_errors_fp(stderr);
       return false;
     }
+    if (! SSL_CTX_check_private_key(_ctx)) {
+      ERR_print_errors_fp(stderr);
+      return false;
+    }
     return true;
   }
   return false;
