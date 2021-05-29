@@ -16,7 +16,13 @@ set(IPROUTE_PATH "/usr/bin/ip")
 set(ROUTE_PATH "/usr/bin/route")
 configure_file(config.h.in config.h @ONLY)
 
-include_directories("/usr/local/include")
+if(${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD")
+  include_directories("/usr/local/include")
+endif()
+
+if(${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
+  include_directories("/usr/local/Cellar/openssl\@1.1/1.1.1k/include" "/usr/local/Cellar/libev/4.33/include")
+endif()
 
 if(${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
   add_definitions("-std=c++11 -Wall")
@@ -41,17 +47,17 @@ check_library(ev FATAL_ERROR)
 check_library(ssl FATAL_ERROR)
 check_library(crypto FATAL_ERROR)
 
-if(NOT ${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
-  check_library(execinfo FATAL_ERROR)
-endif()
-
 file(GLOB SRCFILES "*.cpp")
 file(GLOB HDRFILES "*.h")
 add_executable(jackpot ${SRCFILES} ${HDRFILES})
 target_link_libraries(jackpot ${DEPLIBS})
 
 if(NOT ${CMAKE_VERSION} VERSION_LESS 3.13)
-  target_link_directories(jackpot PUBLIC "/usr/local/lib")
+  if (${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD")
+    target_link_directories(jackpot PUBLIC "/usr/local/lib")
+  elseif(${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
+    target_link_directories(jackpot PUBLIC "/usr/local/Cellar/openssl\@1.1/1.1.1k/lib" "/usr/local/Cellar/libev/4.33/lib")
+  endif()
 endif()
 
 set(CMAKE_INSTALL_BINDIR "/usr/bin")

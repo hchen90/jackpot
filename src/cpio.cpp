@@ -250,9 +250,15 @@ bool CPIO::parse_bin(ifstream& ins, CPIOAttr& attr, string& filename, CPIOConten
   attr.c_stat.st_gid = (gid_t) attr.c_attr.c_bin.c_gid;
   attr.c_stat.st_rdev = (dev_t) attr.c_attr.c_bin.c_rdev;
   attr.c_stat.st_size = (off_t) (attr.c_attr.c_bin.c_filesize[0] << 16) | attr.c_attr.c_bin.c_filesize[1];
+#ifdef __APPLE__
+  attr.c_stat.st_atimespec.tv_sec = (time_t) (attr.c_attr.c_bin.c_mtime[0] << 16) | attr.c_attr.c_bin.c_mtime[1];
+  attr.c_stat.st_mtimespec.tv_sec = attr.c_stat.st_atimespec.tv_sec;
+  attr.c_stat.st_ctimespec.tv_sec = attr.c_stat.st_atimespec.tv_sec;
+#else
   attr.c_stat.st_atim.tv_sec = (time_t) (attr.c_attr.c_bin.c_mtime[0] << 16) | attr.c_attr.c_bin.c_mtime[1];
   attr.c_stat.st_mtim.tv_sec = attr.c_stat.st_atim.tv_sec;
   attr.c_stat.st_ctim.tv_sec = attr.c_stat.st_atim.tv_sec;
+#endif
 
   // filename
   char* fl = new char[attr.c_attr.c_bin.c_namesize + 1];
@@ -306,9 +312,15 @@ bool CPIO::parse_odc(ifstream& ins, CPIOAttr& attr, string& filename, CPIOConten
   attr.c_stat.st_gid = (gid_t) from_oct(attr.c_attr.c_odc.c_gid, sizeof(attr.c_attr.c_odc.c_gid));
   attr.c_stat.st_rdev = (dev_t) from_oct(attr.c_attr.c_odc.c_rdev, sizeof(attr.c_attr.c_odc.c_rdev));
   attr.c_stat.st_size = (off_t) from_oct(attr.c_attr.c_odc.c_filesize, sizeof(attr.c_attr.c_odc.c_filesize));
+#ifdef __APPLE__
+  attr.c_stat.st_atimespec.tv_sec = (time_t) from_oct(attr.c_attr.c_odc.c_mtime, sizeof(attr.c_attr.c_odc.c_mtime));
+  attr.c_stat.st_mtimespec.tv_sec = attr.c_stat.st_atimespec.tv_sec;
+  attr.c_stat.st_ctimespec.tv_sec = attr.c_stat.st_atimespec.tv_sec;
+#else
   attr.c_stat.st_atim.tv_sec = (time_t) from_oct(attr.c_attr.c_odc.c_mtime, sizeof(attr.c_attr.c_odc.c_mtime));
   attr.c_stat.st_mtim.tv_sec = attr.c_stat.st_atim.tv_sec;
   attr.c_stat.st_ctim.tv_sec = attr.c_stat.st_atim.tv_sec;
+#endif
 
   // filename
   auto nmsz = from_oct(attr.c_attr.c_odc.c_namesize, sizeof(attr.c_attr.c_odc.c_namesize));
@@ -363,9 +375,15 @@ bool CPIO::parse_crc(ifstream& ins, CPIOAttr& attr, string& filename, CPIOConten
   attr.c_stat.st_gid = (gid_t) from_hex(attr.c_attr.c_crc.c_gid, sizeof(attr.c_attr.c_crc.c_gid));
   attr.c_stat.st_rdev = makedev(from_hex(attr.c_attr.c_crc.c_rdev_maj, sizeof(attr.c_attr.c_crc.c_rdev_maj)), from_hex(attr.c_attr.c_crc.c_rdev_min, sizeof(attr.c_attr.c_crc.c_rdev_min)));
   attr.c_stat.st_size = (off_t) from_hex(attr.c_attr.c_crc.c_filesize, sizeof(attr.c_attr.c_crc.c_filesize));
+#ifdef __APPLE__
+  attr.c_stat.st_atimespec.tv_sec = (time_t) from_hex(attr.c_attr.c_crc.c_mtime, sizeof(attr.c_attr.c_crc.c_mtime));
+  attr.c_stat.st_mtimespec.tv_sec = attr.c_stat.st_atimespec.tv_sec;
+  attr.c_stat.st_ctimespec.tv_sec = attr.c_stat.st_atimespec.tv_sec;
+#else
   attr.c_stat.st_atim.tv_sec = (time_t) from_hex(attr.c_attr.c_crc.c_mtime, sizeof(attr.c_attr.c_crc.c_mtime));
   attr.c_stat.st_mtim.tv_sec = attr.c_stat.st_atim.tv_sec;
   attr.c_stat.st_ctim.tv_sec = attr.c_stat.st_atim.tv_sec;
+#endif
 
   // filename
   auto nmsz = from_hex(attr.c_attr.c_crc.c_namesize, sizeof(attr.c_attr.c_crc.c_namesize));
@@ -419,8 +437,13 @@ bool CPIO::dump_bin(ofstream& outs, CPIOAttr& attr, string& filename, CPIOConten
   attr.c_attr.c_bin.c_gid = attr.c_stat.st_gid;
   attr.c_attr.c_bin.c_nlink = attr.c_stat.st_nlink;
   attr.c_attr.c_bin.c_rdev = attr.c_stat.st_rdev;
+#ifdef __APPLE__
+  attr.c_attr.c_bin.c_mtime[0] = (attr.c_stat.st_mtimespec.tv_sec >> 16) & 0xffff;
+  attr.c_attr.c_bin.c_mtime[1] = attr.c_stat.st_mtimespec.tv_sec & 0xffff;
+#else
   attr.c_attr.c_bin.c_mtime[0] = (attr.c_stat.st_mtim.tv_sec >> 16) & 0xffff;
   attr.c_attr.c_bin.c_mtime[1] = attr.c_stat.st_mtim.tv_sec & 0xffff;
+#endif
   attr.c_attr.c_bin.c_namesize = filename.size() + 1;
   attr.c_attr.c_bin.c_filesize[0] = (attr.c_stat.st_size >> 16) & 0xffff;
   attr.c_attr.c_bin.c_filesize[1] = attr.c_stat.st_size & 0xffff;
@@ -460,7 +483,11 @@ bool CPIO::dump_odc(ofstream& outs, CPIOAttr& attr, string& filename, CPIOConten
   to_oct((uint32_t) attr.c_stat.st_gid, 6, (uint8_t*) attr.c_attr.c_odc.c_gid);
   to_oct((uint32_t) attr.c_stat.st_nlink, 6, (uint8_t*) attr.c_attr.c_odc.c_nlink);
   to_oct((uint32_t) attr.c_stat.st_rdev, 6, (uint8_t*) attr.c_attr.c_odc.c_rdev);
+#ifdef __APPLE__
+  to_oct((uint32_t) attr.c_stat.st_mtimespec.tv_sec, 11, (uint8_t*) attr.c_attr.c_odc.c_mtime);
+#else
   to_oct((uint32_t) attr.c_stat.st_mtim.tv_sec, 11, (uint8_t*) attr.c_attr.c_odc.c_mtime);
+#endif
   to_oct((uint32_t) filename.size() + 1, 6, (uint8_t*) attr.c_attr.c_odc.c_namesize);
   to_oct((uint32_t) attr.c_stat.st_size, 11, (uint8_t*) attr.c_attr.c_odc.c_filesize);
   
@@ -497,7 +524,11 @@ bool CPIO::dump_crc(ofstream& outs, CPIOAttr& attr, string& filename, CPIOConten
   to_hex((uint32_t) attr.c_stat.st_uid, 8, (uint8_t*) attr.c_attr.c_crc.c_uid);
   to_hex((uint32_t) attr.c_stat.st_gid, 8, (uint8_t*) attr.c_attr.c_crc.c_gid);
   to_hex((uint32_t) attr.c_stat.st_nlink, 8, (uint8_t*) attr.c_attr.c_crc.c_nlink);
+#ifdef __APPLE__
+  to_hex((uint32_t) attr.c_stat.st_mtimespec.tv_sec, 8, (uint8_t*) attr.c_attr.c_crc.c_mtime);
+#else
   to_hex((uint32_t) attr.c_stat.st_mtim.tv_sec, 8, (uint8_t*) attr.c_attr.c_crc.c_mtime);
+#endif
   to_hex((uint32_t) attr.c_stat.st_size, 8, (uint8_t*) attr.c_attr.c_crc.c_filesize);
   to_hex((uint32_t) major(attr.c_stat.st_dev), 8, (uint8_t*) attr.c_attr.c_crc.c_dev_maj);
   to_hex((uint32_t) minor(attr.c_stat.st_dev), 8, (uint8_t*) attr.c_attr.c_crc.c_dev_min);
