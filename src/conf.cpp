@@ -81,9 +81,9 @@ bool Conf::open(const void* ptr, size_t len)
       // blank line
     } else if (regex_match(line, re_cmt)) {
       // comment
-    } else if (regex_search(line, sm, re_sec) && sm.size() == 2) { // section
-      session = sm[1];
-    } else if (regex_search(line, sm, re_par) && sm.size() == 3) { // search kay-value pair
+    } else if (regex_search(line, sm, re_sec) && sm.size() == 4) { // section
+      session = sm[2];
+    } else if (regex_search(line, sm, re_par) && sm.size() == 6) { // search kay-value pair
       if (_settings.find(session) == _settings.end()) {
 #ifdef USE_SMARTPOINTER
         auto mp = make_shared<map<string, string>>();
@@ -101,7 +101,7 @@ bool Conf::open(const void* ptr, size_t len)
       }
       auto lt = _settings.find(session);
       if (lt != _settings.end() && lt->second != nullptr) {
-        lt->second->insert(make_pair(sm[1], sm[2]));
+        lt->second->insert(make_pair(sm[2], sm[5]));
       }
     } else break;
 

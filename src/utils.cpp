@@ -187,8 +187,8 @@ bool utils::token(const std::string& str, const std::string& delim, std::vector<
 std::string utils::chomp(const std::string& str)
 {
   std::smatch sma;
-  std::regex rec("[\\r\\n]+*([^\\r\\n]+)[\\r\\n]+*");
-  if (std::regex_search(str, sma, rec) && sma.size() == 2) return sma[1];
+  std::regex rec("([\\r\\n]+)?([^\\r\\n]+)([\\r\\n]+)?");
+  if (std::regex_search(str, sma, rec) && sma.size() == 4) return sma[2];
   return str;
 }
 
