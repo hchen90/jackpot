@@ -22,7 +22,7 @@
 #include "conf.h"
 
 #define ANONYMOUS_SECTION ".anonymous"
-#define REGEX_BLANK "[\t ]+*"
+#define REGEX_BLANK "([\t ]+)?"
 #define REGEX_COMMENT REGEX_BLANK ";.*"
 #define REGEX_SECTION REGEX_BLANK "\\[([^\r\n\t ]+)\\]" REGEX_BLANK
 #define REGEX_PAIR REGEX_BLANK "([^\r\n\t ]+)" REGEX_BLANK "=" REGEX_BLANK "([^\r\n]+)"
@@ -58,7 +58,7 @@ bool Conf::open(const void* ptr, size_t len)
   char* end = strchr(start, '\n');
 
   if (end == nullptr) end = strchr(start, 0);
-  
+
   smatch sm;
 
   regex re_bla(REGEX_BLANK);
@@ -138,9 +138,9 @@ bool Conf::open(const string& file)
       if (getline(fin, line)) {
         if (regex_match(line, re_bla)) continue; // skip blank line
         if (regex_match(line, re_cmt)) continue; // skip comment
-        if (regex_search(line, sm, re_sec) && sm.size() == 2) { // search section
-          session = sm[1];
-        } else if (regex_search(line, sm, re_par) && sm.size() == 3) { // search kay = value pair
+        if (regex_search(line, sm, re_sec) && sm.size() == 4) { // search section
+          session = sm[2];
+        } else if (regex_search(line, sm, re_par) && sm.size() == 6) { // search kay = value pair
           if (_settings.find(session) == _settings.end()) {
 #ifdef USE_SMARTPOINTER
             auto mp = make_shared<map<string, string>>();
@@ -158,7 +158,7 @@ bool Conf::open(const string& file)
           }
           auto lt = _settings.find(session);
           if (lt != _settings.end() && lt->second) {
-            lt->second->insert(make_pair(sm[1], sm[2]));
+            lt->second->insert(make_pair(sm[2], sm[5]));
           }
         } else break;
         okay = true;
