@@ -15,7 +15,7 @@
 #include <memory>
 #endif
 
-#include "socks.h"
+#include "sock.h"
 #include "config.h"
 
 class SSLcli {

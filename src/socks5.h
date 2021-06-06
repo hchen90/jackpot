@@ -11,7 +11,7 @@
 #include <thread>
 #include <map>
 
-#include "socks.h"
+#include "sock.h"
 #include "tls.h"
 #include "websrv.h"
 

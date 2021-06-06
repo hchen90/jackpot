@@ -30,7 +30,7 @@
 
 static std::mutex _std_log_mutex, _std_err_mutex;
 
-void utils::log(const std::string& fmt, ...)
+void utils::log(const char* fmt, ...)
 {
   va_list ap;
   va_start(ap, fmt);
@@ -40,11 +40,11 @@ void utils::log(const std::string& fmt, ...)
 
 static bool _log_disp_timestamp = false;
 
-void utils::log(const std::string& fmt, va_list ap)
+void utils::log(const char* fmt, va_list ap)
 {
   char buf[BUFSIZ];
 
-  if (vsnprintf(buf, sizeof(buf), fmt.c_str(), ap) > 0) {
+  if (vsnprintf(buf, sizeof(buf), fmt, ap) > 0) {
     std::ostringstream oss;
 
     if (_log_disp_timestamp) {
@@ -64,7 +64,7 @@ void utils::log_disp_timestamp(bool dts)
   _log_disp_timestamp = dts;
 }
 
-void utils::error(const std::string& fmt, ...)
+void utils::error(const char* fmt, ...)
 {
   va_list ap;
   va_start(ap, fmt);
@@ -78,7 +78,7 @@ void utils::error(const std::string& fmt, ...)
     format += " (";
     format += serr;
     format += ")";
-    utils::log(format, ap);
+    utils::log(format.c_str(), ap);
   }
 
   va_end(ap);
@@ -151,7 +151,7 @@ void utils::dump(const void* ptr, size_t len)
     str += suf;
   }
 
-  log(str);
+  log(str.c_str());
 }
 
 bool utils::token(const std::string& str, const std::string& delim, std::vector<std::string>& result)

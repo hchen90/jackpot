@@ -17,7 +17,7 @@
 
 #include "tls.h"
 #include "conf.h"
-#include "socks.h"
+#include "sock.h"
 #include "socks5.h"
 #include "client.h"
 #include "websrv.h"

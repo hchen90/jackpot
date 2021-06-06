@@ -26,7 +26,7 @@
 #include <cstdlib>
 
 #include "config.h"
-#include "socks.h"
+#include "sock.h"
 
 using namespace std;
 
