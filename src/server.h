@@ -10,7 +10,7 @@
 #include <string>
 #include <thread>
 #include <list>
-#include <map>
+#include <unordered_map>
 #include <mutex>
 
 #include <ev++.h>
@@ -80,7 +80,7 @@ private:
               // default: [client] port 1080
 
   std::string _serial, _pidfile;
-  std::map<std::string, std::string> _nmpwd;
+  std::unordered_map<std::string, std::string> _nmpwd;
 
 #ifdef USE_SMARTPOINTER
   std::list<std::shared_ptr<SOCKS5>> _lst_socks5;
