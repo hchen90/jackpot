@@ -1,8 +1,0 @@
-FROM alpine:latest
-RUN apk --update --no-cache add libev-dev openssl-dev gcc g++ clang cmake make
-COPY . /usr/src/jackpot
-WORKDIR /usr/src/jackpot
-RUN cmake . && make && make install
-RUN apk del make cmake clang g++ gcc
-WORKDIR /
-RUN rm -rf /usr/src/jackpot
